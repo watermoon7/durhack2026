@@ -1,7 +1,7 @@
 /** Static configuration for the Market Band frontend. */
 
 /** Base URL of the local FastAPI backend (see backend config API_HOST / API_PORT). */
-export const API_BASE_URL = 'http://127.0.0.1:8000'
+export const API_BASE_URL = ''
 
 /** Master output level. Measured: full band on Q1 2020 data peaks ~0.35 of full scale at -2 dB. */
 export const MASTER_VOLUME_DB = -2

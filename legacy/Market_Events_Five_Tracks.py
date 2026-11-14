@@ -113,6 +113,8 @@ def make_song(tables, calibration):
         messages = [(0, 0, b"\xff\x03"+base.variable_length(len(label))+label)]
         if program is not None:
             messages.append((0, 0, bytes([0xC0|channel, program])))
+        if name == "synth_lead":
+            messages.append((0, 0, bytes([0xB0 | channel, 7, 35])))
         per_bar, slot = count//BARS, end/count
         previous_pitch, previous_chord = None, []
         for i, row in tables[name].iterrows():

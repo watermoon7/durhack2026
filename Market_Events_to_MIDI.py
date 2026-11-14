@@ -1,18 +1,16 @@
-"""Download real SPY minute data and build ten 120-second MIDI sonifications.
-Python 3.10+. pip install numpy pandas; python Market_Events_to_MIDI.py
+"""Download SPY minute data and create ten 120-second MIDI sonifications.
+Python 3.11+. pip install numpy pandas; python Market_Events_to_MIDI.py
 Alternative: python Market_Events_to_MIDI.py --source your_minute_data.csv
-Downloads are performed on YOUR computer/Codespace, not by the chat.
 """
 from pathlib import Path
-import argparse, hashlib, json, struct, urllib.request, zipfile
+import argparse, hashlib, struct, urllib.request, zipfile
 import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent
 SOURCE_URL = "https://www.kaggle.com/api/v1/datasets/download/gratefuldata/intraday-stock-data-1-min-sp-500-200821"
 PROVENANCE = "https://www.kaggle.com/datasets/gratefuldata/intraday-stock-data-1-min-sp-500-200821"
-# Start inclusive, end exclusive. Interpret dates in the source's own clock.
-# Context windows, NOT assertions of exclusive causation or complete recovery.
+# Context windows; start inclusive, end exclusive, in the source clock.
 EVENTS = [
     ("2010_flash_crash", "2010-04-01", "2010-12-01"),
     ("2011_debt_ceiling_euro_crisis", "2011-04-01", "2012-04-01"),
@@ -26,16 +24,17 @@ EVENTS = [
     ("2020_covid_crash_rebound", "2019-12-01", "2021-03-01"),
 ]
 BARS, BPM, TPB = 60, 120, 480
-# name, candles, MIDI channel (zero based), program, low/high pitch
 TRACKS = [("bass", 60, 0, 33, 28, 48),
           ("synth", 240, 1, 81, 55, 84),
           ("drums", 960, 9, None, 0, 0)]
-EMA_SPAN = 12
-VOL_WINDOW = 12
-VOLUME_WINDOW = 20
-# Optional rhythmic displacement is bounded to a fraction of the note slot.
-MAX_DISPLACEMENT = 0.18
-SCALE = [n for n in range(128) if n % 12 in (0, 2, 3, 5, 7, 8, 10)]  # C minor
+EMA_SPAN, VOL_WINDOW, VOLUME_WINDOW = 12, 12, 20
+MAX_DISPLACEMENT = 0.08  # Only offbeat hats/synth; strong beats stay fixed.
+VELOCITY_MIN, VELOCITY_MAX = 35, 115
+GRADIENT_QUANTILE = 0.95
+SCALE_CLASSES = (0, 2, 3, 5, 7, 8, 10)  # C natural minor
+ROOT_DEGREES = (0, 3, 4, 5)  # C, F, G, Ab: choices, NOT a chord progression.
+SCALE = [n for n in range(128) if n % 12 in SCALE_CLASSES]
+DRUM_KICK, DRUM_SNARE, DRUM_HAT = 36, 38, 42
 
 
 def get_source(supplied):
@@ -79,10 +78,7 @@ def read_source(path):
     frame = frame[columns].copy()
     text = frame.timestamp.astype(str).str.strip()
     compact = text.str.match(r"^\d{8} ")
-    if compact.all():
-        frame.timestamp = pd.to_datetime(text, format="%Y%m%d %H:%M:%S", errors="raise")
-    else:
-        frame.timestamp = pd.to_datetime(text, format="mixed", errors="raise")
+    frame.timestamp = pd.to_datetime(text, format="%Y%m%d %H:%M:%S" if compact.all() else "mixed", errors="raise")
     for field in columns[1:]:
         frame[field] = pd.to_numeric(frame[field], errors="raise")
     frame = frame.drop_duplicates().sort_values("timestamp")
@@ -96,8 +92,7 @@ def validate(frame, start, end):
         raise ValueError(f"Only {len(frame)} source bars; need at least 960")
     if frame.index[0] > pd.Timestamp(start) + pd.Timedelta(days=7) or frame.index[-1] < pd.Timestamp(end) - pd.Timedelta(days=7):
         raise ValueError("Data does not cover requested event boundaries")
-    numeric = frame.to_numpy()
-    if not np.isfinite(numeric).all() or (frame[["open", "high", "low", "close"]] <= 0).any().any() or (frame.volume < 0).any():
+    if not np.isfinite(frame.to_numpy()).all() or (frame[["open", "high", "low", "close"]] <= 0).any().any() or (frame.volume < 0).any():
         raise ValueError("Invalid/missing/non-finite OHLCV")
     if ((frame.high < frame[["open", "close", "low"]].max(axis=1)) | (frame.low > frame[["open", "close", "high"]].min(axis=1))).any():
         raise ValueError("Invalid OHLC ordering")
@@ -107,7 +102,6 @@ def validate(frame, start, end):
         raise ValueError("Expected one-minute-or-coarser distinct source timestamps")
     same_date = stamps.dt.date.eq(stamps.shift().dt.date)
     gaps = same_date & (differences > pd.Timedelta(minutes=1))
-    # Refuse major unobserved intraday stretches; never fabricate their prices.
     if gaps.sum() / len(frame) > 0.01 or (differences[gaps] > pd.Timedelta(minutes=5)).any():
         raise ValueError("Intraday gaps exceed tolerance; inspect source/session structure")
     dates = pd.DatetimeIndex(frame.index.normalize().unique())
@@ -117,8 +111,7 @@ def validate(frame, start, end):
 
 
 def candles(frame, count):
-    # Equal windows on an OBSERVED-minute axis; no invented or reused bars.
-    # Bin edges are rounded to source precision; variation is at most one minute.
+    # Equal observed-minute windows; no invented/reused bars.
     boundaries = np.arange(count + 1) * len(frame) // count
     rows = []
     for index, (left, right) in enumerate(zip(boundaries[:-1], boundaries[1:])):
@@ -133,6 +126,12 @@ def candles(frame, count):
     activity = result.volume / result.source_count
     baseline = activity.shift().rolling(VOLUME_WINDOW, min_periods=1).mean()
     result["relative_volume"] = (activity / baseline.replace(0, np.nan)).fillna(1).clip(0, 10)
+    # Fractional EMA slope magnitude; each track/event has its own robust scale.
+    # Offline percentile normalisation; NOT directly comparable across events.
+    result["ema_gradient"] = np.log(result["ema"]).diff().abs().fillna(0.0)
+    gradient_scale = float(result["ema_gradient"].quantile(GRADIENT_QUANTILE))
+    result["gradient_strength"] = ((result["ema_gradient"] / gradient_scale).clip(0.0, 1.0)
+                                   if gradient_scale > 0 else 0.0)
     return result
 
 
@@ -153,11 +152,28 @@ def midi_track(messages, end_tick):
     return b"MTrk" + struct.pack(">I", len(data)) + data
 
 
+def chord_classes(root):
+    """Diatonic root, third, fifth AND seventh in C natural minor."""
+    degree = SCALE_CLASSES.index(root % 12)
+    return tuple(SCALE_CLASSES[(degree + step) % 7] for step in (0, 2, 4, 6))
+
+
+def bass_roots(table, extent, low, high):
+    allowed = [n for n in range(low, high + 1)
+               if n % 12 in [SCALE_CLASSES[d] for d in ROOT_DEGREES]]
+    return [min(allowed, key=lambda n: abs(n - (low + (np.clip(t / extent, -1, 1) + 1) * 0.5 * (high-low))))
+            for t in table.trend]
+
+
 def make_song(frame):
     metrics = {name: candles(frame, count) for name, count, *_ in TRACKS}
     extent = max(abs(table.trend).max() for table in metrics.values()) or 1.0
+    bass_config = next(t for t in TRACKS if t[0] == "bass")
+    roots = bass_roots(metrics["bass"], extent, bass_config[4], bass_config[5])
     end_tick = BARS * 4 * TPB
-    tracks = [midi_track([(0, 0, b"\xff\x51\x03\x07\xa1\x20"),
+    tempo = int(round(60_000_000 / BPM))
+    seconds_per_tick = tempo / 1_000_000 / TPB
+    tracks = [midi_track([(0, 0, b"\xff\x51\x03" + tempo.to_bytes(3, "big")),
                           (0, 0, b"\xff\x58\x04\x04\x02\x18\x08")], end_tick)]
     rows = []
     for name, count, channel, program, low, high in TRACKS:
@@ -166,29 +182,52 @@ def make_song(frame):
         messages = [] if program is None else [(0, 0, bytes([0xC0 | channel, program]))]
         slot = end_tick / count
         notes_per_bar = count // BARS
+        previous_pitch = None
         for i, candle in table.iterrows():
             trend = float(np.clip(candle.trend / extent, -1, 1))
             stress = float(np.clip(candle.volatility / volatility_limit, 0, 1))
-            position = i % notes_per_bar
-            # Keep bar downbeats fixed; alternate later note offsets, without collisions.
-            shift = 0 if position == 0 else MAX_DISPLACEMENT * stress * (1 if position % 2 else -1)
+            position, bar = i % notes_per_bar, i // notes_per_bar
+            root = int(roots[bar])
+            chord = chord_classes(root)
+            # Shared small swing rule, no arbitrary early notes. Bass/main beats fixed.
+            shift = MAX_DISPLACEMENT * stress if name != "bass" and position % 2 else 0.0
             tick = int(round((i + shift) * slot))
-            duration = max(1, int(slot * (0.45 if name == "drums" else 0.60)))
+            duration = max(1, int(slot * (0.35 if name == "drums" else 0.60)))
             stop = min(end_tick, tick + duration)
+            accent = 1.0
+            strong_beat = position % 2 == 0
             if name == "drums":
-                # Percussion keys select sounds, not tuned pitch. Trend controls timbral register.
-                palette = [36, 38, 42] if trend < -0.2 else ([36, 38, 46] if trend < 0.2 else [36, 39, 51])
-                pitch = palette[0 if position in (0, 8) else 1 if position in (4, 12) else 2]
+                if position in (0, 8):
+                    pitch, accent = DRUM_KICK, 1.0
+                elif position in (4, 12):
+                    pitch, accent = DRUM_SNARE, 0.95
+                else:
+                    pitch = DRUM_HAT
+                    accent = 0.68 if position % 2 == 0 else 0.45
+                strong_beat = position % 4 == 0
+            elif name == "bass":
+                pitch = root
             else:
                 target = low + (trend + 1) * 0.5 * (high - low)
-                pitch = min((n for n in SCALE if low <= n <= high), key=lambda n: abs(n - target))
-            velocity = int(round(35 + 80 * np.clip(np.log2(1 + candle.relative_volume) / 2, 0, 1)))
+                candidates = [n for n in SCALE if low <= n <= high and
+                              (not strong_beat or n % 12 in chord)]
+                if previous_pitch is not None:
+                    nearby = [n for n in candidates if abs(n - previous_pitch) <= 5]
+                    candidates = nearby or candidates
+                pitch = min(candidates, key=lambda n: abs(n-target) +
+                            (0.6 * abs(n-previous_pitch) if previous_pitch is not None else 0))
+                previous_pitch = pitch
+            base_velocity = VELOCITY_MIN + (VELOCITY_MAX-VELOCITY_MIN) * candle.gradient_strength
+            velocity = int(np.clip(round(base_velocity * accent), 1, 127))
             messages += [(tick, 2, bytes([0x90 | channel, pitch, velocity])),
                          (stop, 1, bytes([0x80 | channel, pitch, 0]))]
-            rows.append(dict(track=name, instrument=name, bar=i // notes_per_bar + 1,
-                pitch_midi=pitch, velocity=velocity, start_seconds=tick / TPB * 0.5,
-                duration_seconds=(stop-tick) / TPB * 0.5, rhythm_offset_fraction=shift,
-                trend_normalised=trend, volatility_normalised=stress, **candle.to_dict()))
+            rows.append(dict(track=name, instrument=name, bar=bar + 1,
+                pitch_midi=int(pitch), velocity=velocity, velocity_base=base_velocity,
+                drum_accent=accent, harmony_root_midi=root,
+                chord_pitch_classes=";".join(map(str, chord)), strong_beat=strong_beat,
+                start_seconds=tick * seconds_per_tick, duration_seconds=(stop-tick) * seconds_per_tick,
+                rhythm_offset_fraction=shift, trend_normalised=trend,
+                volatility_normalised=stress, **candle.to_dict()))
         tracks.append(midi_track(messages, end_tick))
     binary = b"MThd" + struct.pack(">IHHH", 6, 1, len(tracks), TPB) + b"".join(tracks)
     return binary, pd.DataFrame(rows)
@@ -200,7 +239,8 @@ def main():
     parser.add_argument("--output", default=str(ROOT / "data/market_events"))
     args = parser.parse_args()
     source = get_source(args.source)
-    digest = hashlib.file_digest(source.open("rb"), "sha256").hexdigest()
+    with source.open("rb") as handle:
+        digest = hashlib.file_digest(handle, "sha256").hexdigest()
     data = read_source(source)
     output = Path(args.output); output.mkdir(parents=True, exist_ok=True)
     manifest = []
@@ -209,7 +249,6 @@ def main():
                       symbol="SPY", source=PROVENANCE if not args.source else str(source), sha256=digest)
         destination = output / name
         destination.mkdir(exist_ok=True)
-        # Never leave old outputs masquerading as a newly successful conversion.
         for old in destination.glob("*"):
             if old.name in ("song.mid", "metrics.csv", "source.csv"):
                 old.unlink()
@@ -224,7 +263,8 @@ def main():
             (destination / "song.mid").write_bytes(binary)
             record.update(status="ok", source_rows=len(frame), first=str(frame.index[0]),
                           last=str(frame.index[-1]), tolerated_intraday_gaps=gap_count,
-                          duration_seconds=120, notes=len(events))
+                          duration_seconds=BARS * 4 * 60 / BPM, notes=len(events),
+                          arrangement="ema_gradient_seventh_harmony_v2")
             print(f"OK {name}: {len(frame)} genuine bars -> {len(events)} notes")
         except (ValueError, AssertionError) as error:
             record.update(status="FAILED", reason=str(error))

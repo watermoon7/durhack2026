@@ -122,7 +122,7 @@ def make_song(tables, calibration):
             stress = float(row.volatility_strength)
             shift = SWING*stress if name in ("drums", "synth_lead", "guitar") and position%2 else 0
             start = int(round((i+shift)*slot))
-            accent, shock_boost, gain = 1.0, 0.0, 1.0
+            accent, shock_boost, gain = 1.0, 0.0, 0.6 if name == "synth_lead" else 1.0
             gate = .85-.50*stress
             if name == "bass":
                 pitches, gate = [root], .85

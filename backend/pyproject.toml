@@ -1,0 +1,55 @@
+[project]
+name = "market-band"
+version = "0.1.0"
+description = "Market Band backend: raw market data -> IR -> MIDI."
+authors = [
+    { name = "Will", email = "williamohal@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.163.0",
+    "mido>=1.3.3",
+    "pandas>=3.1.1",
+    "uvicorn[standard]>=0.54.0",
+    "yfinance>=1.8.0",
+]
+
+[project.scripts]
+market-band-fetch = "market_band.fetch:main"
+market-band-serve = "market_band.api:main"
+
+[build-system]
+requires = ["uv_build>=0.11.29,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.4.1",
+    "pandas-stubs>=3.1.0.261029",
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF", "D"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]
+
+[tool.mypy]
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+# mido and yfinance ship no type stubs; their call sites are wrapped in typed functions.
+module = ["mido", "yfinance"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

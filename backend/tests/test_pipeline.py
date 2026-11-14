@@ -130,3 +130,58 @@ def test_api_unknown_ids_404() -> None:
     assert client.get("/api/datasets/nope/ir").status_code == 404
     response = client.get("/api/midi", params={"dataset_id": "spy", "instrument_id": "nope"})
     assert response.status_code == 404
+
+
+def test_event_catalog_parts_and_midi() -> None:
+    client = TestClient(app)
+    events = client.get("/api/events").json()
+    assert len(events) == 10
+    signatures = set()
+    for event in events:
+        prefix = f"/api/events/{event['id']}"
+        parts = client.get(f"{prefix}/datasets").json()
+        assert {p["id"] for p in parts} == {"bass", "synth_lead", "synth_pad", "guitar", "drums"}
+        for part in parts:
+            response = client.get(f"{prefix}/datasets/{part['id']}/ir")
+            assert response.status_code == 200
+            beats = response.json()["beats"]
+            assert len(beats) == 240
+            assert all(0 <= b["level"] <= 1 for b in beats)
+        for instrument in INSTRUMENTS:
+            part_id = "drums" if instrument.id in ("kick", "snare", "hihat") else "synth_pad"
+            response = client.get(
+                f"{prefix}/midi",
+                params={
+                    "dataset_id": part_id,
+                    "instrument_id": instrument.id,
+                },
+            )
+            assert response.status_code == 200
+            midi = mido.MidiFile(file=io.BytesIO(response.content))
+            assert midi.type == 0
+            notes = [m for m in midi.tracks[0] if m.type == "note_on" and m.velocity]
+            assert notes
+            assert all(
+                instrument.root_midi <= n.note <= instrument.root_midi + 12 * instrument.octaves
+                for n in notes
+            )
+            if instrument.id == "synth":
+                signatures.add(response.content)
+    assert len(signatures) == 10
+
+
+def test_event_api_rejects_unknown_sources() -> None:
+    client = TestClient(app)
+    assert client.get("/api/events/no-such-event/datasets").status_code == 404
+    prefix = "/api/events/2010_flash_crash"
+    assert client.get(f"{prefix}/datasets/no-such-part/ir").status_code == 404
+    assert (
+        client.get(
+            f"{prefix}/midi",
+            params={
+                "dataset_id": "bass",
+                "instrument_id": "no-such-instrument",
+            },
+        ).status_code
+        == 404
+    )

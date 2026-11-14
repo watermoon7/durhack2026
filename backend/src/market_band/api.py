@@ -26,6 +26,7 @@ from market_band.config import (
     DatasetConfig,
     InstrumentConfig,
 )
+from market_band.events import router as events_router
 from market_band.ir import IRSeries, load_raw_stock, stock_to_ir
 
 MIDI_MEDIA_TYPE = "audio/midi"
@@ -50,6 +51,7 @@ class InstrumentInfo(BaseModel):
 
 
 app = FastAPI(title="Market Band API", version="0.1.0")
+app.include_router(events_router)
 app.add_middleware(
     CORSMiddleware, allow_origins=list(CORS_ORIGINS), allow_methods=["GET"], allow_headers=["*"]
 )

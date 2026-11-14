@@ -17,7 +17,8 @@ import { createVoice, type Voice } from './voices'
 export type NoteListener = (instrumentId: string, velocity: number) => void
 
 interface Slot {
-  readonly voice: Voice
+  voice: Voice | null
+  readonly instrument: Instrument
   eventIds: number[]
   beats: number
 }
@@ -36,14 +37,6 @@ export interface Band {
   dispose(): void
 }
 
-/** Build one instrument's slot from its preset. */
-function createSlot(instrument: Instrument, context: AudioContext, output: AudioNode): Slot {
-  const preset = SOUND_PRESETS[instrument.id]
-  if (preset === undefined) throw new Error(`no sound preset for instrument '${instrument.id}'`)
-  const voice = createVoice(preset, instrument.root_midi, context, output)
-  return { voice, eventIds: [], beats: 0 }
-}
-
 /**
  * Create the band for the given instruments. Tone runs on a native AudioContext that the smplr
  * voices share, so Transport callback times are directly usable as sample start times.
@@ -59,11 +52,10 @@ export function createBand(instruments: readonly Instrument[], onNote: NoteListe
   const bus = context.createGain() // smplr voices -> bus -> Tone master
   Tone.connect(bus, master)
   const slots = new Map<string, Slot>(
-    instruments.map((instrument) => [instrument.id, createSlot(instrument, context, bus)]),
+    instruments.map((instrument) => [instrument.id, { instrument, voice: null, eventIds: [], beats: 0 }]),
   )
-  const ready = Promise.all([...slots.values()].map((slot) => slot.voice.ready))
-  // Report a failed load straight away; play() still rejects with it so the UI shows it too.
-  void ready.catch((reason: unknown) => console.error('instrument samples failed to load', reason))
+  let disposed = false
+  let playSequence = 0
 
   const slotFor = (instrumentId: string): Slot => {
     const slot = slots.get(instrumentId)
@@ -83,7 +75,7 @@ export function createBand(instruments: readonly Instrument[], onNote: NoteListe
   const clear = (instrumentId: string): void => {
     const slot = slotFor(instrumentId)
     slot.eventIds.forEach((id) => transport.clear(id))
-    slot.voice.silence()
+    slot.voice?.silence()
     slot.eventIds = []
     slot.beats = 0
     updateLoop()
@@ -95,13 +87,20 @@ export function createBand(instruments: readonly Instrument[], onNote: NoteListe
     if (tempo === undefined || track === undefined) throw new Error('MIDI lacks tempo or track')
     clear(instrumentId)
     const slot = slotFor(instrumentId)
+    if (slot.voice === null) {
+      const preset = SOUND_PRESETS[instrumentId]
+      if (!preset) throw new Error(`no sound preset for ${instrumentId}`)
+      slot.voice = createVoice(preset, slot.instrument.root_midi, context, bus, slot.instrument.octaves)
+      void slot.voice.ready.catch((reason: unknown) => console.error('instrument samples failed to load', reason))
+    }
+    const voice = slot.voice
     transport.bpm.value = tempo.bpm
     const scale = transport.PPQ / midi.header.ppq // MIDI ticks -> transport ticks
     slot.eventIds = track.notes.map((note) => {
       const durationTicks = Math.round(note.durationTicks * scale)
       return transport.schedule((time) => {
         const durationSeconds = Tone.Ticks(durationTicks).toSeconds()
-        slot.voice.trigger(note.midi, durationSeconds, time, note.velocity)
+        voice.trigger(note.midi, durationSeconds, time, note.velocity)
         draw.schedule(() => onNote(instrumentId, note.velocity), time)
       }, `${Math.round(note.ticks * scale)}i`)
     })
@@ -114,21 +113,26 @@ export function createBand(instruments: readonly Instrument[], onNote: NoteListe
     load,
     clear,
     play: async () => {
+      const sequence = ++playSequence
       await Tone.start()
-      await ready // samples normally finish loading long before the first click
+      await Promise.all([...slots.values()].filter((slot) => slot.beats > 0).map((slot) => slot.voice?.ready))
+      if (disposed || sequence !== playSequence) return
       transport.start()
     },
     stop: () => {
+      playSequence++
       transport.stop()
       transport.position = 0
-      slots.forEach((slot) => slot.voice.silence())
+      slots.forEach((slot) => slot.voice?.silence())
     },
     currentBeat: () => transport.ticks / transport.PPQ,
     loopBeats,
     dispose: () => {
+      disposed = true
+      playSequence++
       transport.stop()
       transport.cancel()
-      slots.forEach((slot) => slot.voice.dispose())
+      slots.forEach((slot) => slot.voice?.dispose())
       bus.disconnect()
       master.dispose()
       toneContext.dispose() // also closes the AudioContext

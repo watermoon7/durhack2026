@@ -1,7 +1,7 @@
 /** Static configuration for the Market Band frontend. */
 
-/** Base URL of the local FastAPI backend (see backend config API_HOST / API_PORT). */
-export const API_BASE_URL = 'http://127.0.0.1:8000'
+/** Use the frontend origin; Vite forwards API requests to the local backend. */
+export const API_BASE_URL = ''
 
 /** Master output level. Measured: full band on Q1 2020 data peaks ~0.35 of full scale at -2 dB. */
 export const MASTER_VOLUME_DB = -2
@@ -69,5 +69,15 @@ export const SOUND_PRESETS: Readonly<Record<string, SoundPreset>> = {
     kind: 'pitched',
     url: `${SAMPLES_BASE_URL}soundfonts/electric_bass_finger-mp3.js`,
     volume: 95,
+  },
+  guitar: {
+    kind: 'pitched',
+    url: `${SAMPLES_BASE_URL}soundfonts/acoustic_guitar_steel-mp3.js`,
+    volume: 110,
+  },
+  synth2: {
+    kind: 'pitched',
+    url: `${SAMPLES_BASE_URL}soundfonts/acoustic_grand_piano-mp3.js`,
+    volume: 127,
   },
 }

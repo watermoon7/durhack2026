@@ -74,7 +74,7 @@ function Octave({ x }: { readonly x: number }) {
 }
 
 /** Synth keyboard, drawn at 420x150 and placed into its outline. */
-export function SynthArt() {
+export function SynthArt({ x = 410, y = 428, label = 'SYNTH 1' }: { readonly x?: number; readonly y?: number; readonly label?: string } = {}) {
   // Knob centre x and the end point of its pointer, so the knobs read as set to different values.
   const knobs = [
     { cx: 50, tx: 50, ty: 31 },
@@ -84,7 +84,7 @@ export function SynthArt() {
     { cx: 170, tx: 170, ty: 31 },
   ]
   return (
-    <g transform="translate(410 428) scale(0.905)">
+    <g transform={`translate(${x} ${y}) scale(0.905)`}>
       <rect x={0} y={10} width={18} height={130} rx={4} fill="#8a5632" />
       <rect x={402} y={10} width={18} height={130} rx={4} fill="#8a5632" />
       <rect x={16} y={14} width={388} height={122} rx={6} fill="#1d1f23" />
@@ -103,10 +103,45 @@ export function SynthArt() {
         </g>
       ))}
       <rect x={220} y={28} width={90} height={22} rx={3} fill="#0d0e10" />
+      <text x={265} y={43} textAnchor="middle" fill="#c8e8bc" fontSize={12} fontFamily="monospace">{label}</text>
       <circle cx={340} cy={39} r={6} fill="#e3a72f" />
       <circle cx={365} cy={39} r={6} fill="#3a3d43" />
       <Octave x={0} />
       <Octave x={175} />
+    </g>
+  )
+}
+
+/** A second independent keyboard with the original synth sound. */
+export function SynthTwoArt() {
+  return <SynthArt x={560} y={228} label="SYNTH 2" />
+}
+
+/** Steel-string acoustic guitar, with a wooden body and round sound hole. */
+export function AcousticGuitarArt() {
+  return (
+    <g transform="translate(1270 50)">
+      <path d="M66 76 L62 18 Q80 0 98 18 L94 76 Z" fill="#aa713f" />
+      <g fill={CHROME}>
+        {[28, 45, 62].map((y) => (
+          <g key={y}><circle cx={57} cy={y} r={4} /><circle cx={103} cy={y} r={4} /></g>
+        ))}
+      </g>
+      <rect x={69} y={72} width={22} height={198} fill="#49301f" />
+      <g stroke={CHROME} strokeWidth={1}>
+        {[94, 116, 137, 157, 176, 194, 211, 227, 242, 256].map((y) => (
+          <line key={y} x1={69} x2={91} y1={y} y2={y} />
+        ))}
+      </g>
+      <path d="M80 248 C48 220 12 242 24 278 C38 310 32 319 14 348 C-8 394 26 418 80 414 C134 418 168 394 146 348 C128 319 122 310 136 278 C148 242 112 220 80 248 Z" fill="#d8a45d" stroke="#80502a" strokeWidth={5} />
+      <circle cx={80} cy={302} r={28} fill="none" stroke="#8b5b30" strokeWidth={3} />
+      <circle cx={80} cy={302} r={23} fill="#30231b" />
+      <rect x={53} y={371} width={54} height={12} rx={3} fill="#49301f" />
+      <g stroke="#ede1bd" strokeWidth={0.9}>
+        {[72, 75, 78, 82, 85, 88].map((x) => (
+          <line key={x} x1={x} x2={x} y1={22} y2={378} />
+        ))}
+      </g>
     </g>
   )
 }

@@ -1,6 +1,21 @@
 # Market Band
 
-Drag a dataset (a stock over Q1 2020) onto an instrument and the band plays it.
+Choose one of ten market events, then build a tune on the seven-instrument stage.
+
+The original stock tray contains SPY, AAPL, TSLA, GLD and TLT using the committed
+Q1 2020 OHLCV data. Their charts and playback are independent of event selection.
+A separate yellow crash card plays the selected event's original arrangement:
+its drum part on Kick/Snare/Hi-hat, bass on Bass, lead/pad on the two synths,
+and guitar on Guitar. It has no price chart because these legacy files contain
+MIDI rather than raw prices. Stock card tooltips include the data period.
+
+The event catalog comes from `legacy/data/market_events_v3/manifest.csv` and each
+crash arrangement from its `song.mid`. Use **Events** to return to the menu;
+changing sessions stops and clears the current tune. Event links support browser Back.
+
+Instrument samples load on first assignment, restricted to the playable range.
+The stage and stock tray appear before charts finish loading; Play waits only
+for assigned instruments, with a loading indicator during sample decoding.
 
 ```
 raw OHLCV CSV ──► IR (level, activity, intensity per beat) ──► .mid ──► Tone.js instrument

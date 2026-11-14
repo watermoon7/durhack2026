@@ -70,6 +70,16 @@ INSTRUMENTS: tuple[InstrumentConfig, ...] = (
     InstrumentConfig(
         id="bass", name="Bass", root_midi=36, octaves=2, subdivisions=MELODIC_SUBDIVISIONS
     ),
+    InstrumentConfig(
+        id="guitar",
+        name="Acoustic guitar",
+        root_midi=48,
+        octaves=2,
+        subdivisions=MELODIC_SUBDIVISIONS,
+    ),
+    InstrumentConfig(
+        id="synth2", name="Synth 2", root_midi=60, octaves=2, subdivisions=MELODIC_SUBDIVISIONS
+    ),
 )
 
 # --- API --------------------------------------------------------------------

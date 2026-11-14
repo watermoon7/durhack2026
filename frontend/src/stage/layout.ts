@@ -3,7 +3,7 @@
  * area + ring when filled) and a tag anchor (ticker pill). Outlines never overlap.
  */
 
-export const STAGE_WIDTH = 1200
+export const STAGE_WIDTH = 1500
 export const STAGE_HEIGHT = 620
 
 export type Outline =
@@ -41,6 +41,14 @@ export const PLACEMENTS: Readonly<Record<string, PiecePlacement>> = {
     outline: { kind: 'rect', x: 990, y: 44, width: 140, height: 432, rx: 28 },
     tag: { x: 1060, y: 500 },
   },
+  guitar: {
+    outline: { kind: 'rect', x: 1260, y: 44, width: 180, height: 432, rx: 28 },
+    tag: { x: 1350, y: 500 },
+  },
+  synth2: {
+    outline: { kind: 'rect', x: 552, y: 230, width: 396, height: 136, rx: 14 },
+    tag: { x: 750, y: 392 },
+  },
 }
 
 /** Soft light pools, one per zone (drums, synth, bass). */
@@ -48,6 +56,8 @@ export const POOLS = [
   { cx: 290, cy: 280, rx: 250, ry: 160 },
   { cx: 600, cy: 498, rx: 230, ry: 95 },
   { cx: 1060, cy: 262, rx: 120, ry: 232 },
+  { cx: 1350, cy: 262, rx: 120, ry: 232 },
+  { cx: 750, cy: 298, rx: 230, ry: 95 },
 ] as const
 
 export const PLAY = { cx: 600, cy: 80, r: 34, ringR: 42 } as const

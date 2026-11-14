@@ -1,7 +1,7 @@
 /**
  * Instrument voices: one smplr sample player per band member, behind a common trigger interface
  * so the band can schedule pitched and drum notes the same way. All samples are self-hosted
- * under public/ and start loading as soon as the voice is created.
+ * under public/ and load only when their instrument is first assigned.
  */
 
 import { DrumMachine, Soundfont, type Smplr } from 'smplr'
@@ -58,10 +58,11 @@ function lifecycle(player: Smplr): Pick<Voice, 'ready' | 'silence' | 'dispose'> 
 }
 
 /** Sampled melodic instrument; velocity sets loudness and a per-note lowpass. */
-function createPitched(preset: PitchedPreset, context: AudioContext, output: AudioNode): Voice {
+function createPitched(preset: PitchedPreset, context: AudioContext, output: AudioNode, rootMidi: number, octaves: number): Voice {
   if (preset.url === '') throw new Error('pitched preset needs a soundfont url')
   const player = Soundfont(context, {
     instrumentUrl: preset.url,
+    notesToLoad: { notes: Array.from({ length: octaves * 12 + 1 }, (_, i) => rootMidi + i) },
     destination: output,
     volume: preset.volume,
   })
@@ -90,6 +91,7 @@ function createDrum(
   if (preset.sample === '') throw new Error('drum preset needs a sample name')
   const player = DrumMachine(context, {
     url: preset.kitUrl,
+    notesToLoad: { notes: [preset.sample] },
     destination: output,
     volume: preset.volume,
   })
@@ -113,11 +115,12 @@ export function createVoice(
   rootMidi: number,
   context: AudioContext,
   output: AudioNode,
+  octaves = 2,
 ): Voice {
   if (!Number.isInteger(rootMidi)) throw new Error(`rootMidi must be an integer, got ${rootMidi}`)
   switch (preset.kind) {
     case 'pitched':
-      return createPitched(preset, context, output)
+      return createPitched(preset, context, output, rootMidi, octaves)
     case 'drum':
       return createDrum(preset, rootMidi, context, output)
   }

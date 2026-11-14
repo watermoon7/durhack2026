@@ -7,6 +7,7 @@
  * never grow beyond one MIDI file's notes per instrument.
  */
 
+import type { Midi } from '@tonejs/midi'
 import * as Tone from 'tone'
 import type { Instrument } from '../api'
 import { MASTER_VOLUME_DB, SOUND_PRESETS } from '../config'
@@ -15,21 +16,6 @@ import { createVoice, type Voice } from './voices'
 /** Called on the animation frame matching each note, for visual pulses. */
 export type NoteListener = (instrumentId: string, velocity: number) => void
 
-/** One note of a part, in MIDI ticks at the part's ppq; `velocity` is 0-1. */
-export interface PartNote {
-  readonly ticks: number
-  readonly durationTicks: number
-  readonly midi: number
-  readonly velocity: number
-}
-
-/** Everything one instrument plays, plus the clock (tempo, ticks per beat) it was written in. */
-export interface Part {
-  readonly bpm: number
-  readonly ppq: number
-  readonly notes: readonly PartNote[]
-}
-
 interface Slot {
   readonly voice: Voice
   eventIds: number[]
@@ -37,8 +23,8 @@ interface Slot {
 }
 
 export interface Band {
-  /** Schedule a part on an instrument, replacing whatever it played before. */
-  load(instrumentId: string, part: Part): void
+  /** Schedule a parsed MIDI file on an instrument, replacing whatever it played before. */
+  load(instrumentId: string, midi: Midi): void
   /** Silence an instrument. */
   clear(instrumentId: string): void
   play(): Promise<void>
@@ -103,13 +89,15 @@ export function createBand(instruments: readonly Instrument[], onNote: NoteListe
     updateLoop()
   }
 
-  const load = (instrumentId: string, part: Part): void => {
-    if (!(part.bpm > 0 && part.ppq > 0)) throw new Error(`part needs positive bpm and ppq`)
+  const load = (instrumentId: string, midi: Midi): void => {
+    const tempo = midi.header.tempos[0]
+    const track = midi.tracks[0]
+    if (tempo === undefined || track === undefined) throw new Error('MIDI lacks tempo or track')
     clear(instrumentId)
     const slot = slotFor(instrumentId)
-    transport.bpm.value = part.bpm
-    const scale = transport.PPQ / part.ppq // MIDI ticks -> transport ticks
-    slot.eventIds = part.notes.map((note) => {
+    transport.bpm.value = tempo.bpm
+    const scale = transport.PPQ / midi.header.ppq // MIDI ticks -> transport ticks
+    slot.eventIds = track.notes.map((note) => {
       const durationTicks = Math.round(note.durationTicks * scale)
       return transport.schedule((time) => {
         const durationSeconds = Tone.Ticks(durationTicks).toSeconds()
@@ -117,8 +105,8 @@ export function createBand(instruments: readonly Instrument[], onNote: NoteListe
         draw.schedule(() => onNote(instrumentId, note.velocity), time)
       }, `${Math.round(note.ticks * scale)}i`)
     })
-    const lastTick = Math.max(0, ...part.notes.map((note) => note.ticks + note.durationTicks))
-    slot.beats = Math.ceil(lastTick / part.ppq) // whole beats
+    const lastTick = Math.max(0, ...track.notes.map((note) => note.ticks + note.durationTicks))
+    slot.beats = Math.ceil(lastTick / midi.header.ppq) // whole beats: one per IR row
     updateLoop()
   }
 

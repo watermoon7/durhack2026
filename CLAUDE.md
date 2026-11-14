@@ -38,6 +38,7 @@ Pipeline: **raw data → IR → .mid file → instrument.**
 - **Algorithm** (deliberately simple): `level` picks a degree of the instrument's 2-octave slice of a shared scale (C major pentatonic for now: no clashes, so harmony isn't audible yet); `activity` picks 1, 2 or 4 notes per beat; `intensity` sets velocity, which the frontend also maps to filter cutoff.
 - **Timing**: 120 bpm, 1 trading day = 1 beat. Demo datasets are Q1 2020 (62 trading days ≈ 31 s), looped on a shared transport.
 - **Config**: tunables live in `backend/src/market_band/config.py` and `frontend/src/config.ts`; instrument ranges are defined in the backend, sounds in the frontend.
+- **Legacy algorithm** (`legacy/`): a teammate's market-event → multi-track MIDI scripts and their data. Kept for later; not wired into the app. See `legacy/README.md`.
 - Later: musical ↔ raw slider (turn off scale snapping) and scenario captions.
 
 ### Open decisions

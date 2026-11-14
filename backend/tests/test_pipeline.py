@@ -15,14 +15,19 @@ from market_band.algorithm import (
 from market_band.api import app
 from market_band.config import (
     INSTRUMENTS,
+    MELODIC_SUBDIVISIONS,
     MIDI_VELOCITY_MAX,
-    SUBDIVISIONS,
     TICKS_PER_BEAT,
     InstrumentConfig,
 )
 from market_band.ir import IRBeat, percentile_rank, stock_to_ir
 
-KEYS = InstrumentConfig(id="keys", name="Keys", root_midi=48, octaves=2)
+KEYS = InstrumentConfig(
+    id="keys", name="Keys", root_midi=48, octaves=2, subdivisions=MELODIC_SUBDIVISIONS
+)
+KICK = next(i for i in INSTRUMENTS if i.id == "kick")
+SNARE = next(i for i in INSTRUMENTS if i.id == "snare")
+WILD = IRBeat(date="d", level=1, activity=1, intensity=1)
 
 
 def make_frame(closes: list[float], volumes: list[float]) -> pd.DataFrame:
@@ -61,13 +66,36 @@ def test_scale_spans_two_octaves_of_pentatonic() -> None:
 
 def test_beat_extremes_map_to_range_ends_and_subdivisions() -> None:
     scale = scale_notes(KEYS)
-    calm_low = beat_to_notes(0, IRBeat(date="d", level=0, activity=0, intensity=0), scale)
-    wild_high = beat_to_notes(3, IRBeat(date="d", level=1, activity=1, intensity=1), scale)
+    calm_low = beat_to_notes(0, IRBeat(date="d", level=0, activity=0, intensity=0), scale, KEYS)
+    wild_high = beat_to_notes(3, WILD, scale, KEYS)
     assert [n.midi for n in calm_low] == [48]
-    assert len(wild_high) == SUBDIVISIONS[-1]
+    assert len(wild_high) == MELODIC_SUBDIVISIONS[-1]
     assert {n.midi for n in wild_high} == {72}
     assert wild_high[0].start_beat == 3.0
     assert wild_high[0].velocity == MIDI_VELOCITY_MAX
+
+
+def test_kick_never_exceeds_two_hits() -> None:
+    assert len(beat_to_notes(0, WILD, scale_notes(KICK), KICK)) == 2
+
+
+def test_snare_offset_shifts_start() -> None:
+    notes = beat_to_notes(3, WILD, scale_notes(SNARE), SNARE)
+    assert notes[0].start_beat == 3.5
+
+
+def test_offset_notes_fit_in_beat() -> None:
+    for instrument in INSTRUMENTS:
+        for note in beat_to_notes(3, WILD, scale_notes(instrument), instrument):
+            assert note.start_beat + note.duration_beats <= 4.0
+
+
+def test_bad_offset_raises() -> None:
+    bad = InstrumentConfig(
+        id="x", name="X", root_midi=48, octaves=1, subdivisions=(1,), offset_beats=1.0
+    )
+    with pytest.raises(ValueError, match="offset"):
+        beat_to_notes(0, WILD, scale_notes(bad), bad)
 
 
 def test_intensity_out_of_range_raises() -> None:

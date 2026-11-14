@@ -22,12 +22,14 @@ class DatasetConfig:
 
 @dataclass(frozen=True)
 class InstrumentConfig:
-    """A band member: the pitch range its notes are drawn from."""
+    """A band member: its pitch range and the rhythm grid its notes fall on."""
 
     id: str
     name: str
     root_midi: int  # lowest note; must share pitch class with SCALE_ROOT_PITCH_CLASS
     octaves: int
+    subdivisions: tuple[int, ...]  # notes per beat, chosen by IR activity (low -> high)
+    offset_beats: float = 0.0  # delay within each beat, e.g. 0.5 puts the snare between kicks
 
 
 # --- Data -------------------------------------------------------------------
@@ -50,16 +52,24 @@ TEMPO_BPM = 120
 TICKS_PER_BEAT = 480
 SCALE_ROOT_PITCH_CLASS = 0  # C
 SCALE_INTERVALS: tuple[int, ...] = (0, 2, 4, 7, 9)  # major pentatonic: nothing clashes (yet)
-SUBDIVISIONS: tuple[int, ...] = (1, 2, 4)  # notes per beat, chosen by IR activity
+MELODIC_SUBDIVISIONS: tuple[int, ...] = (1, 2, 4)  # notes per beat for pitched instruments
 NOTE_LEGATO = 0.9  # fraction of a subdivision a note sounds for
 VELOCITY_FLOOR = 0.3  # quietest note as a fraction of full velocity
 MIDI_VELOCITY_MAX = 127
 
+# Drums use a 1-octave range: level becomes a subtle tuning shift rather than a melody.
 INSTRUMENTS: tuple[InstrumentConfig, ...] = (
-    InstrumentConfig(id="bass", name="Bass", root_midi=36, octaves=2),
-    InstrumentConfig(id="keys", name="Keys", root_midi=48, octaves=2),
-    InstrumentConfig(id="lead", name="Lead", root_midi=60, octaves=2),
-    InstrumentConfig(id="bells", name="Bells", root_midi=72, octaves=2),
+    InstrumentConfig(id="kick", name="Kick", root_midi=24, octaves=1, subdivisions=(1, 2)),
+    InstrumentConfig(
+        id="snare", name="Snare", root_midi=48, octaves=1, subdivisions=(1, 2), offset_beats=0.5
+    ),
+    InstrumentConfig(id="hihat", name="Hi-hat", root_midi=72, octaves=1, subdivisions=(2, 4)),
+    InstrumentConfig(
+        id="synth", name="Synth", root_midi=60, octaves=2, subdivisions=MELODIC_SUBDIVISIONS
+    ),
+    InstrumentConfig(
+        id="bass", name="Bass", root_midi=36, octaves=2, subdivisions=MELODIC_SUBDIVISIONS
+    ),
 )
 
 # --- API --------------------------------------------------------------------

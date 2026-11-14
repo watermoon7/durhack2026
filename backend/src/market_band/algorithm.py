@@ -2,7 +2,8 @@
 
 Per beat, deliberately simple for the first demo:
 - pitch:    ``level`` picks a degree of the instrument's slice of the shared scale
-- rhythm:   ``activity`` picks how many notes subdivide the beat (SUBDIVISIONS)
+- rhythm:   ``activity`` picks how many notes subdivide the beat (per-instrument
+            ``subdivisions``), starting ``offset_beats`` into the beat
 - velocity: ``intensity`` scales note velocity above VELOCITY_FLOOR; the frontend also
             maps velocity to filter brightness, so the two are one combined control
 """
@@ -17,7 +18,6 @@ from market_band.config import (
     NOTE_LEGATO,
     SCALE_INTERVALS,
     SCALE_ROOT_PITCH_CLASS,
-    SUBDIVISIONS,
     TEMPO_BPM,
     TICKS_PER_BEAT,
     VELOCITY_FLOOR,
@@ -65,18 +65,28 @@ def intensity_to_velocity(intensity: float) -> int:
     return velocity
 
 
-def beat_to_notes(index: int, beat: IRBeat, scale: tuple[int, ...]) -> list[Note]:
-    """Render one IR beat as ``count`` equal-length notes on the same pitch."""
+def beat_to_notes(
+    index: int, beat: IRBeat, scale: tuple[int, ...], instrument: InstrumentConfig
+) -> list[Note]:
+    """Render one IR beat as ``count`` equal-length notes on the same pitch.
+
+    Notes fill the part of the beat after ``offset_beats``, so they never spill into the next.
+    """
     assert index >= 0, "beat index must be non-negative"
     assert len(scale) > 0, "scale must contain notes"
+    subdivisions = instrument.subdivisions
+    if not subdivisions or min(subdivisions) < 1:
+        raise ValueError(f"{instrument.id}: subdivisions must be positive and non-empty")
+    if not 0.0 <= instrument.offset_beats < 1.0:
+        raise ValueError(f"{instrument.id}: offset_beats must be in [0, 1)")
     midi = scale[round(beat.level * (len(scale) - 1))]
-    slot = min(int(beat.activity * len(SUBDIVISIONS)), len(SUBDIVISIONS) - 1)
-    count = SUBDIVISIONS[slot]
+    slot = min(int(beat.activity * len(subdivisions)), len(subdivisions) - 1)
+    count = subdivisions[slot]
     velocity = intensity_to_velocity(beat.intensity)
-    step = 1.0 / count
+    step = (1.0 - instrument.offset_beats) / count
     return [
         Note(
-            start_beat=index + n * step,
+            start_beat=index + instrument.offset_beats + n * step,
             duration_beats=step * NOTE_LEGATO,
             midi=midi,
             velocity=velocity,
@@ -91,7 +101,7 @@ def ir_to_notes(ir: IRSeries, instrument: InstrumentConfig) -> list[Note]:
     scale = scale_notes(instrument)
     notes: list[Note] = []
     for index, beat in enumerate(ir.beats):
-        notes.extend(beat_to_notes(index, beat, scale))
+        notes.extend(beat_to_notes(index, beat, scale, instrument))
     return notes
 
 

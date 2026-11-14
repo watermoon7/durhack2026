@@ -1,0 +1,71 @@
+import type { Dataset, Instrument } from '../api'
+import type { JSX } from 'react'
+import { BassArt, HihatArt, KickArt, SnareArt, SynthArt } from './art'
+import { Defs } from './Defs'
+import { PLACEMENTS, POOLS, STAGE_HEIGHT, STAGE_WIDTH } from './layout'
+import { Piece } from './Piece'
+import { PlayButton } from './PlayButton'
+
+/** Art component per backend instrument id. */
+const ART: Readonly<Record<string, () => JSX.Element>> = {
+  kick: KickArt,
+  snare: SnareArt,
+  hihat: HihatArt,
+  synth: SynthArt,
+  bass: BassArt,
+}
+
+interface StageProps {
+  readonly instruments: readonly Instrument[]
+  readonly datasets: readonly Dataset[]
+  /** instrument id -> dataset id */
+  readonly assignments: Readonly<Record<string, string>>
+  readonly lit: Readonly<Record<string, boolean>>
+  readonly playing: boolean
+  readonly progress: number
+  readonly onAssign: (instrumentId: string, datasetId: string) => void
+  readonly onClear: (instrumentId: string) => void
+  readonly onTogglePlay: () => void
+}
+
+/** The whole stage: room, light pools, play button and every band member. */
+export function Stage(props: StageProps) {
+  const { instruments, datasets, assignments, lit, playing, progress } = props
+  const tickerFor = (instrumentId: string): string | null => {
+    const datasetId = assignments[instrumentId]
+    return datasets.find((d) => d.id === datasetId)?.ticker ?? null
+  }
+
+  return (
+    <svg className="stage" viewBox={`0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`} role="group" aria-label="Stage">
+      <Defs />
+      {POOLS.map((pool) => (
+        <ellipse key={pool.cx} {...pool} fill="url(#mb-pool)" />
+      ))}
+      <PlayButton
+        playing={playing}
+        disabled={Object.keys(assignments).length === 0}
+        progress={progress}
+        onToggle={props.onTogglePlay}
+      />
+      {instruments.map((instrument) => {
+        const placement = PLACEMENTS[instrument.id]
+        const Art = ART[instrument.id]
+        if (placement === undefined || Art === undefined) return null // not part of this stage
+        return (
+          <Piece
+            key={instrument.id}
+            instrumentId={instrument.id}
+            placement={placement}
+            ticker={tickerFor(instrument.id)}
+            lit={lit[instrument.id] === true}
+            onAssign={props.onAssign}
+            onClear={props.onClear}
+          >
+            <Art />
+          </Piece>
+        )
+      })}
+    </svg>
+  )
+}

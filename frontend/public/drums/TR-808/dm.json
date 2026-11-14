@@ -1,0 +1,13 @@
+{
+  "baseUrl": "https://smpldsnds.github.io/drum-machines/tr-808/",
+  "name": "tr-808",
+  "samples": [
+    "kick/bd2550",
+    "snare/sd5050",
+    "hihat-close/ch"
+  ],
+  "formats": [
+    "ogg",
+    "m4a"
+  ]
+}

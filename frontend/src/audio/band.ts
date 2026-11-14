@@ -1,112 +1,124 @@
 /**
- * The band's audio engine: one synth + brightness filter per instrument, all scheduled on
- * Tone's shared Transport so every instrument plays against the same clock.
+ * The band's audio engine: one voice per instrument, all scheduled on Tone's shared Transport
+ * so every instrument plays against the same clock.
  *
  * Lifecycle: create once per page with createBand(), call dispose() on unmount. Scheduled
- * event ids per voice are replaced wholesale on load() and dropped on clear(), so they never
- * grow beyond one MIDI file's notes per instrument.
+ * event ids per instrument are replaced wholesale on load() and dropped on clear(), so they
+ * never grow beyond one MIDI file's notes per instrument.
  */
 
-import type { Midi } from '@tonejs/midi'
 import * as Tone from 'tone'
-import {
-  BRIGHTNESS_MAX_HZ,
-  BRIGHTNESS_MIN_HZ,
-  FILTER_Q,
-  MASTER_VOLUME_DB,
-  SOUND_PRESETS,
-} from '../config'
+import type { Instrument } from '../api'
+import { MASTER_VOLUME_DB, SOUND_PRESETS } from '../config'
+import { createVoice, type Voice } from './voices'
 
-interface Voice {
-  readonly synth: Tone.Synth
-  readonly filter: Tone.Filter
+/** Called on the animation frame matching each note, for visual pulses. */
+export type NoteListener = (instrumentId: string, velocity: number) => void
+
+/** One note of a part, in MIDI ticks at the part's ppq; `velocity` is 0-1. */
+export interface PartNote {
+  readonly ticks: number
+  readonly durationTicks: number
+  readonly midi: number
+  readonly velocity: number
+}
+
+/** Everything one instrument plays, plus the clock (tempo, ticks per beat) it was written in. */
+export interface Part {
+  readonly bpm: number
+  readonly ppq: number
+  readonly notes: readonly PartNote[]
+}
+
+interface Slot {
+  readonly voice: Voice
   eventIds: number[]
   beats: number
 }
 
 export interface Band {
-  /** Schedule a parsed MIDI file on an instrument, replacing whatever it played before. */
-  load(instrumentId: string, midi: Midi): void
+  /** Schedule a part on an instrument, replacing whatever it played before. */
+  load(instrumentId: string, part: Part): void
   /** Silence an instrument. */
   clear(instrumentId: string): void
   play(): Promise<void>
   stop(): void
-  /** Current playhead position in beats (fractional). */
+  /** Current playhead position in beats (fractional, not wrapped). */
   currentBeat(): number
+  /** Length of the loop in beats (0 when nothing is loaded). */
+  loopBeats(): number
   dispose(): void
 }
 
-/** Map a 0..1 velocity onto an exponential filter-cutoff sweep. */
-function velocityToCutoff(velocity: number): number {
-  const clamped = Math.min(Math.max(velocity, 0), 1)
-  return BRIGHTNESS_MIN_HZ * (BRIGHTNESS_MAX_HZ / BRIGHTNESS_MIN_HZ) ** clamped
+/** Build one instrument's slot from its preset. */
+function createSlot(instrument: Instrument, context: AudioContext, output: AudioNode): Slot {
+  const preset = SOUND_PRESETS[instrument.id]
+  if (preset === undefined) throw new Error(`no sound preset for instrument '${instrument.id}'`)
+  const voice = createVoice(preset, instrument.root_midi, context, output)
+  return { voice, eventIds: [], beats: 0 }
 }
 
-/** Build one instrument's synth -> filter chain. */
-function createVoice(instrumentId: string, output: Tone.ToneAudioNode): Voice {
-  const preset = SOUND_PRESETS[instrumentId]
-  if (preset === undefined) throw new Error(`no sound preset for instrument '${instrumentId}'`)
-  const filter = new Tone.Filter({ type: 'lowpass', frequency: BRIGHTNESS_MIN_HZ, Q: FILTER_Q })
-  filter.connect(output)
-  const synth = new Tone.Synth({
-    oscillator: { type: preset.oscillator },
-    envelope: {
-      attack: preset.attack,
-      decay: preset.decay,
-      sustain: preset.sustain,
-      release: preset.release,
-    },
-    volume: preset.volumeDb,
-  }).connect(filter)
-  return { synth, filter, eventIds: [], beats: 0 }
-}
-
-/** Create the band for the given instrument ids. */
-export function createBand(instrumentIds: readonly string[]): Band {
-  if (instrumentIds.length === 0) throw new Error('a band needs at least one instrument')
+/**
+ * Create the band for the given instruments. Tone runs on a native AudioContext that the smplr
+ * voices share, so Transport callback times are directly usable as sample start times.
+ */
+export function createBand(instruments: readonly Instrument[], onNote: NoteListener): Band {
+  if (instruments.length === 0) throw new Error('a band needs at least one instrument')
+  const context = new AudioContext()
+  const toneContext = new Tone.Context(context)
+  Tone.setContext(toneContext)
   const transport = Tone.getTransport()
+  const draw = Tone.getDraw()
   const master = new Tone.Volume(MASTER_VOLUME_DB).toDestination()
-  const voices = new Map<string, Voice>(instrumentIds.map((id) => [id, createVoice(id, master)]))
+  const bus = context.createGain() // smplr voices -> bus -> Tone master
+  Tone.connect(bus, master)
+  const slots = new Map<string, Slot>(
+    instruments.map((instrument) => [instrument.id, createSlot(instrument, context, bus)]),
+  )
+  const ready = Promise.all([...slots.values()].map((slot) => slot.voice.ready))
+  // Report a failed load straight away; play() still rejects with it so the UI shows it too.
+  void ready.catch((reason: unknown) => console.error('instrument samples failed to load', reason))
 
-  const voiceFor = (instrumentId: string): Voice => {
-    const voice = voices.get(instrumentId)
-    if (voice === undefined) throw new Error(`unknown instrument '${instrumentId}'`)
-    return voice
+  const slotFor = (instrumentId: string): Slot => {
+    const slot = slots.get(instrumentId)
+    if (slot === undefined) throw new Error(`unknown instrument '${instrumentId}'`)
+    return slot
   }
+
+  const loopBeats = (): number => Math.max(0, ...[...slots.values()].map((slot) => slot.beats))
 
   /** Loop the transport over the longest loaded part. */
   const updateLoop = (): void => {
-    const beats = Math.max(0, ...[...voices.values()].map((voice) => voice.beats))
+    const beats = loopBeats()
     transport.loop = beats > 0
-    transport.setLoopPoints(0, `${beats * transport.PPQ}i`)
+    if (beats > 0) transport.setLoopPoints(0, `${beats * transport.PPQ}i`)
   }
 
   const clear = (instrumentId: string): void => {
-    const voice = voiceFor(instrumentId)
-    voice.eventIds.forEach((id) => transport.clear(id))
-    voice.eventIds = []
-    voice.beats = 0
+    const slot = slotFor(instrumentId)
+    slot.eventIds.forEach((id) => transport.clear(id))
+    slot.voice.silence()
+    slot.eventIds = []
+    slot.beats = 0
     updateLoop()
   }
 
-  const load = (instrumentId: string, midi: Midi): void => {
-    const tempo = midi.header.tempos[0]
-    const track = midi.tracks[0]
-    if (tempo === undefined || track === undefined) throw new Error('MIDI lacks tempo or track')
+  const load = (instrumentId: string, part: Part): void => {
+    if (!(part.bpm > 0 && part.ppq > 0)) throw new Error(`part needs positive bpm and ppq`)
     clear(instrumentId)
-    const voice = voiceFor(instrumentId)
-    transport.bpm.value = tempo.bpm
-    const scale = transport.PPQ / midi.header.ppq // MIDI ticks -> transport ticks
-    voice.eventIds = track.notes.map((note) => {
-      const frequency = Tone.Frequency(note.midi, 'midi').toFrequency()
-      const duration = `${Math.round(note.durationTicks * scale)}i`
+    const slot = slotFor(instrumentId)
+    transport.bpm.value = part.bpm
+    const scale = transport.PPQ / part.ppq // MIDI ticks -> transport ticks
+    slot.eventIds = part.notes.map((note) => {
+      const durationTicks = Math.round(note.durationTicks * scale)
       return transport.schedule((time) => {
-        voice.filter.frequency.setValueAtTime(velocityToCutoff(note.velocity), time)
-        voice.synth.triggerAttackRelease(frequency, duration, time, note.velocity)
+        const durationSeconds = Tone.Ticks(durationTicks).toSeconds()
+        slot.voice.trigger(note.midi, durationSeconds, time, note.velocity)
+        draw.schedule(() => onNote(instrumentId, note.velocity), time)
       }, `${Math.round(note.ticks * scale)}i`)
     })
-    const lastTick = Math.max(0, ...track.notes.map((note) => note.ticks + note.durationTicks))
-    voice.beats = Math.ceil(lastTick / midi.header.ppq) // whole beats: one per IR row
+    const lastTick = Math.max(0, ...part.notes.map((note) => note.ticks + note.durationTicks))
+    slot.beats = Math.ceil(lastTick / part.ppq) // whole beats
     updateLoop()
   }
 
@@ -115,21 +127,23 @@ export function createBand(instrumentIds: readonly string[]): Band {
     clear,
     play: async () => {
       await Tone.start()
+      await ready // samples normally finish loading long before the first click
       transport.start()
     },
     stop: () => {
       transport.stop()
       transport.position = 0
+      slots.forEach((slot) => slot.voice.silence())
     },
     currentBeat: () => transport.ticks / transport.PPQ,
+    loopBeats,
     dispose: () => {
       transport.stop()
       transport.cancel()
-      voices.forEach((voice) => {
-        voice.synth.dispose()
-        voice.filter.dispose()
-      })
+      slots.forEach((slot) => slot.voice.dispose())
+      bus.disconnect()
       master.dispose()
+      toneContext.dispose() // also closes the AudioContext
     },
   }
 }

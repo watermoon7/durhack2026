@@ -1,6 +1,7 @@
 import { Midi } from '@tonejs/midi'
 import { z } from 'zod'
 import { API_BASE_URL } from './config'
+import { normalisePlayableMidi } from './audio/playableMidi.js'
 
 const DatasetSchema = z.object({
   id: z.string(), ticker: z.string(), name: z.string(), period: z.string(),
@@ -13,7 +14,10 @@ const PeriodSchema = z.object({
 })
 const CatalogueSchema = z.object({
   periods: z.array(PeriodSchema), datasets: z.array(DatasetSchema),
-  diagnostics: z.object({ scanned_manifests: z.number(), issues: z.array(z.string()), message: z.string() }),
+  diagnostics: z.object({
+    scanned_manifests: z.number(), issues: z.array(z.string()), message: z.string(),
+    previous_run_issues: z.array(z.string()).optional(),
+  }),
 })
 const InstrumentSchema = z.object({ id: z.string(), name: z.string(), root_midi: z.number().int(), octaves: z.number().int() })
 const IRSchema = z.object({ source: z.string(), beats: z.array(z.object({
@@ -29,7 +33,22 @@ async function request(path: string): Promise<Response> {
   return response
 }
 export async function fetchCatalogue(): Promise<Catalogue> {
-  return CatalogueSchema.parse(await (await request('/catalogue')).json())
+  const data = CatalogueSchema.parse(await (await request('/catalogue')).json())
+  const available = new Set(data.datasets.map(d => `${d.period_id}/${d.ticker}`))
+  const current: string[] = []
+  const previous = [...(data.diagnostics.previous_run_issues ?? [])]
+  for (const issue of data.diagnostics.issues) {
+    const separator = issue.indexOf(': ')
+    const pair = separator < 0 ? '' : issue.slice(0, separator)
+    if (available.has(pair)) previous.push(issue)
+    else current.push(issue)
+  }
+  data.diagnostics.issues = current
+  data.diagnostics.previous_run_issues = [...new Set(previous)]
+  if (previous.length > 0) {
+    data.diagnostics.message += ` ${data.diagnostics.previous_run_issues.length} stored reports from other attempts have an available playable replacement; they are not current missing-asset errors. Original reports remain in /api/history/catalogue and generation manifests. This does not certify historical OHLC quality.`
+  }
+  return data
 }
 export async function fetchInstruments(): Promise<Instrument[]> {
   return z.array(InstrumentSchema).parse(await (await request('/instruments')).json())
@@ -40,6 +59,5 @@ export async function fetchIR(id: string): Promise<IRSeries> {
 export async function fetchMidi(dataset: string, instrument: string): Promise<Midi> {
   const query = new URLSearchParams({ dataset_id: dataset, instrument_id: instrument })
   const midi = new Midi(await (await request(`/midi?${query.toString()}`)).arrayBuffer())
-  if (midi.tracks.length !== 1 || midi.tracks[0]?.notes.length === 0) throw new Error('Expected one playable instrument track')
-  return midi
+  return normalisePlayableMidi(midi)
 }

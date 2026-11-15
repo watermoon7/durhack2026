@@ -3,6 +3,7 @@ import type { Midi } from '@tonejs/midi'
 import * as Tone from 'tone'
 import type { Instrument } from '../api'
 import type { Band, NoteListener } from './band'
+import { normalisePlayableMidi } from './playableMidi.js'
 
 export function createBand(instruments: readonly Instrument[], onNote: NoteListener): Band {
   const context = new AudioContext()
@@ -75,8 +76,8 @@ export function createBand(instruments: readonly Instrument[], onNote: NoteListe
     source.stop(now + Math.max(attack + .03, decay) + .02)
   }
   const load = (id: string, midi: Midi): void => {
-    const track = midi.tracks[0]
-    if (track === undefined || midi.tracks.length !== 1) throw new Error('Expected one historical part')
+    const track = normalisePlayableMidi(midi).tracks[0]
+    if (track === undefined) throw new Error('No playable notes returned')
     clear(id)
     const slot = slotFor(id)
     transport.bpm.value = 120

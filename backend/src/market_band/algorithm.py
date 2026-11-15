@@ -1,7 +1,8 @@
 """The music algorithm: IR series -> notes -> Standard MIDI File bytes.
 
-Per beat, deliberately simple for the first demo:
-- pitch:    ``level`` picks a degree of the instrument's slice of the shared scale
+``render_notes`` dispatches on the instrument's role: ``lead`` (lead.py), ``bass`` (bass.py),
+``pad`` and ``guitar`` (chords.py), and ``drum`` (here). The drum grid, per beat:
+- tuning:   ``level`` picks a degree of the instrument's slice of the shared scale
 - rhythm:   ``activity`` picks how many notes subdivide the beat (per-instrument
             ``subdivisions``), starting ``offset_beats`` into the beat
 - velocity: ``intensity`` scales note velocity above VELOCITY_FLOOR; the frontend also
@@ -9,33 +10,27 @@ Per beat, deliberately simple for the first demo:
 """
 
 import io
-from dataclasses import dataclass
 
 import mido
 
+from market_band.bass import render_bass
+from market_band.chords import render_guitar, render_pad
 from market_band.config import (
-    MIDI_VELOCITY_MAX,
+    DEFAULT_GENRE,
+    GENRES,
     NOTE_LEGATO,
     SCALE_INTERVALS,
     SCALE_ROOT_PITCH_CLASS,
+    SONG_BEATS,
     TEMPO_BPM,
     TICKS_PER_BEAT,
-    VELOCITY_FLOOR,
     InstrumentConfig,
 )
 from market_band.ir import IRBeat, IRSeries
+from market_band.lead import render_lead
+from market_band.notes import Note, intensity_to_velocity
 
 MIDI_NOTE_MAX = 127
-
-
-@dataclass(frozen=True)
-class Note:
-    """A single note in beat time."""
-
-    start_beat: float
-    duration_beats: float
-    midi: int
-    velocity: int
 
 
 def scale_notes(instrument: InstrumentConfig) -> tuple[int, ...]:
@@ -54,15 +49,6 @@ def scale_notes(instrument: InstrumentConfig) -> tuple[int, ...]:
     ]
     notes.append(top)
     return tuple(notes)
-
-
-def intensity_to_velocity(intensity: float) -> int:
-    """Map IR intensity in [0, 1] to a MIDI velocity, never quieter than VELOCITY_FLOOR."""
-    if not 0.0 <= intensity <= 1.0:
-        raise ValueError(f"intensity {intensity} outside [0, 1]")
-    velocity = round(MIDI_VELOCITY_MAX * (VELOCITY_FLOOR + (1.0 - VELOCITY_FLOOR) * intensity))
-    assert 1 <= velocity <= MIDI_VELOCITY_MAX, "velocity must be a sounding MIDI velocity"
-    return velocity
 
 
 def beat_to_notes(
@@ -105,10 +91,19 @@ def ir_to_notes(ir: IRSeries, instrument: InstrumentConfig) -> list[Note]:
     return notes
 
 
-def notes_to_midi(notes: list[Note], track_name: str) -> bytes:
-    """Encode monophonic notes as a single-track Standard MIDI File (type 0)."""
+def notes_to_midi(notes: list[Note], track_name: str, beats: int = SONG_BEATS) -> bytes:
+    """Encode notes as a single-track Standard MIDI File (type 0) exactly ``beats`` long.
+
+    The end-of-track marker sits at ``beats``, so every part loops on the same bar line
+    wherever its last note ends.
+    """
     if not notes:
         raise ValueError("cannot encode an empty note list")
+    if beats < 1:
+        raise ValueError(f"beats must be positive, got {beats}")
+    last_end = max(note.start_beat + note.duration_beats for note in notes)
+    if last_end > beats + 1e-9:
+        raise ValueError(f"a note ends at beat {last_end:g}, after the song's {beats} beats")
     events: list[tuple[int, int, mido.Message]] = []  # (tick, order, message); off before on
     for note in notes:
         start = round(note.start_beat * TICKS_PER_BEAT)
@@ -126,7 +121,8 @@ def notes_to_midi(notes: list[Note], track_name: str) -> bytes:
     for tick, _order, message in events:
         track.append(message.copy(time=tick - previous_tick))
         previous_tick = tick
-    track.append(mido.MetaMessage("end_of_track", time=0))
+    end_tick = beats * TICKS_PER_BEAT
+    track.append(mido.MetaMessage("end_of_track", time=end_tick - previous_tick))
 
     midi_file = mido.MidiFile(type=0, ticks_per_beat=TICKS_PER_BEAT)
     midi_file.tracks.append(track)
@@ -135,6 +131,29 @@ def notes_to_midi(notes: list[Note], track_name: str) -> bytes:
     return buffer.getvalue()
 
 
-def render_midi(ir: IRSeries, instrument: InstrumentConfig) -> bytes:
-    """Run the full algorithm: IR series + instrument -> .mid file bytes."""
-    return notes_to_midi(ir_to_notes(ir, instrument), track_name=f"{ir.source}:{instrument.id}")
+def render_notes(
+    ir: IRSeries, instrument: InstrumentConfig, genre: str = DEFAULT_GENRE
+) -> list[Note]:
+    """Render one instrument's part with the renderer for its role, in the given genre."""
+    assert len(ir.beats) > 0, "IR series must contain beats"
+    if genre not in {g.id for g in GENRES}:
+        raise ValueError(f"unknown genre '{genre}'")
+    if instrument.role == "lead":
+        return render_lead(ir, instrument)
+    if instrument.role == "bass":
+        return render_bass(ir, instrument)
+    if instrument.role == "pad":
+        return render_pad(ir, instrument)
+    if instrument.role == "guitar":
+        return render_guitar(ir, instrument, genre)
+    if instrument.role == "drum":
+        return ir_to_notes(ir, instrument)
+    raise ValueError(f"{instrument.id}: unknown role '{instrument.role}'")
+
+
+def render_midi(
+    ir: IRSeries, instrument: InstrumentConfig, genre: str = DEFAULT_GENRE
+) -> bytes:
+    """Run the full algorithm: IR series + instrument + genre -> .mid file bytes."""
+    notes = render_notes(ir, instrument, genre)
+    return notes_to_midi(notes, track_name=f"{ir.source}:{instrument.id}", beats=len(ir.beats))

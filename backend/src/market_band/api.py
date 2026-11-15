@@ -4,7 +4,8 @@ Endpoints:
 - ``GET /api/datasets``              datasets available to drag onto the stage
 - ``GET /api/instruments``           band members and their pitch ranges
 - ``GET /api/datasets/{id}/ir``      the IR series (drives the chart + playhead)
-- ``GET /api/midi?dataset_id&instrument_id``  the rendered .mid file
+- ``GET /api/genres``                genres the band can play in (first is the default)
+- ``GET /api/midi?dataset_id&instrument_id&genre``  the rendered .mid file
 """
 
 from functools import lru_cache
@@ -20,6 +21,8 @@ from market_band.config import (
     API_PORT,
     CORS_ORIGINS,
     DATASETS,
+    DEFAULT_GENRE,
+    GENRES,
     INSTRUMENTS,
     PERIOD_LABEL,
     RAW_DATA_DIR,
@@ -101,6 +104,19 @@ def list_instruments() -> list[InstrumentInfo]:
     ]
 
 
+class GenreInfo(BaseModel):
+    """A genre as listed to the frontend."""
+
+    id: str
+    name: str
+
+
+@app.get("/api/genres")
+def list_genres() -> list[GenreInfo]:
+    """List the genres the band can play in; the first is the default."""
+    return [GenreInfo(id=g.id, name=g.name) for g in GENRES]
+
+
 @app.get("/api/datasets/{dataset_id}/ir")
 def get_ir(dataset_id: str) -> IRSeries:
     """Return the IR series for a dataset."""
@@ -113,11 +129,15 @@ def get_ir(dataset_id: str) -> IRSeries:
     responses={200: {"content": {MIDI_MEDIA_TYPE: {}}, "description": "A type-0 .mid file"}},
 )
 def get_midi(
-    dataset_id: str = Query(min_length=1), instrument_id: str = Query(min_length=1)
+    dataset_id: str = Query(min_length=1),
+    instrument_id: str = Query(min_length=1),
+    genre: str = Query(default=DEFAULT_GENRE, min_length=1),
 ) -> Response:
-    """Render a dataset as a .mid file for the given instrument."""
+    """Render a dataset as a .mid file for the given instrument and genre."""
     instrument = find_instrument(instrument_id)
-    payload = render_midi(build_ir(dataset_id), instrument)
+    if genre not in {g.id for g in GENRES}:
+        raise HTTPException(status_code=404, detail=f"unknown genre '{genre}'")
+    payload = render_midi(build_ir(dataset_id), instrument, genre)
     filename = f"{dataset_id}_{instrument_id}.mid"
     return Response(
         content=payload,

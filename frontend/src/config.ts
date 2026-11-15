@@ -3,8 +3,42 @@
 /** Base URL of the local FastAPI backend (see backend config API_HOST / API_PORT). */
 export const API_BASE_URL = 'http://127.0.0.1:8000'
 
-/** Master output level. Measured: full band on Q1 2020 data peaks ~0.35 of full scale at -2 dB. */
+/**
+ * Master output level, applied after the compressor and limiter. Measured on Q1 2020 data at
+ * -2 dB: SPY on all seven pieces peaks at ~0.28 of full scale, a mixed band at ~0.38.
+ */
 export const MASTER_VOLUME_DB = -2
+
+/** One instrument's mixer channel (see audio/mix.ts). */
+export interface MixPreset {
+  /** High-pass cutoff in Hz; 0 means no high-pass. */
+  readonly highpassHz: number
+  /** 3-band EQ gains in dB. */
+  readonly eqDb: { readonly low: number; readonly mid: number; readonly high: number }
+  /** How much of the channel is sent to the shared reverb, 0-1. */
+  readonly reverbSend: number
+}
+
+/** Mixer channel per instrument; ids match backend INSTRUMENTS. Low instruments stay dry. */
+export const MIX_PRESETS: Readonly<Record<string, MixPreset>> = {
+  kick: { highpassHz: 0, eqDb: { low: 2, mid: 0, high: 0 }, reverbSend: 0.02 },
+  snare: { highpassHz: 120, eqDb: { low: 0, mid: 0, high: 1 }, reverbSend: 0.15 },
+  hihat: { highpassHz: 400, eqDb: { low: 0, mid: 0, high: 1 }, reverbSend: 0.08 },
+  synth: { highpassHz: 150, eqDb: { low: -2, mid: 0, high: 2 }, reverbSend: 0.3 },
+  bass: { highpassHz: 0, eqDb: { low: 1, mid: -1, high: -2 }, reverbSend: 0.03 },
+  // Chord parts: high-passed and low-cut so their low roots don't muddy the bass.
+  pad: { highpassHz: 90, eqDb: { low: -3, mid: 0, high: -1 }, reverbSend: 0.45 },
+  guitar: { highpassHz: 110, eqDb: { low: -2, mid: 0, high: 2 }, reverbSend: 0.25 },
+}
+
+/** Shared reverb tail length in seconds. */
+export const REVERB_DECAY_S = 2.2
+
+/** Master compressor: gentle glue ahead of the limiter. */
+export const COMPRESSOR = { thresholdDb: -18, ratio: 3 } as const
+
+/** Master limiter ceiling in dB, so the output can never clip. */
+export const LIMITER_DB = -1
 
 /**
  * Pitched voices: velocity 0 -> BRIGHTNESS_MIN_HZ, velocity 1 -> BRIGHTNESS_MAX_HZ (exponential
@@ -69,5 +103,11 @@ export const SOUND_PRESETS: Readonly<Record<string, SoundPreset>> = {
     kind: 'pitched',
     url: `${SAMPLES_BASE_URL}soundfonts/electric_bass_finger-mp3.js`,
     volume: 95,
+  },
+  pad: { kind: 'pitched', url: `${SAMPLES_BASE_URL}soundfonts/pad_2_warm-mp3.js`, volume: 80 },
+  guitar: {
+    kind: 'pitched',
+    url: `${SAMPLES_BASE_URL}soundfonts/acoustic_guitar_steel-mp3.js`,
+    volume: 100,
   },
 }

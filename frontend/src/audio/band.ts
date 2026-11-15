@@ -11,6 +11,7 @@ import type { Midi } from '@tonejs/midi'
 import * as Tone from 'tone'
 import type { Instrument } from '../api'
 import { MASTER_VOLUME_DB, SOUND_PRESETS } from '../config'
+import { createMix } from './mix'
 import { createVoice, type Voice } from './voices'
 
 /** Called on the animation frame matching each note, for visual pulses. */
@@ -55,13 +56,15 @@ export function createBand(instruments: readonly Instrument[], onNote: NoteListe
   Tone.setContext(toneContext)
   const transport = Tone.getTransport()
   const draw = Tone.getDraw()
-  const master = new Tone.Volume(MASTER_VOLUME_DB).toDestination()
-  const bus = context.createGain() // smplr voices -> bus -> Tone master
-  Tone.connect(bus, master)
+  // smplr voices -> their mixer channel -> compressed, limited master
+  const mix = createMix(context, instruments.map((instrument) => instrument.id), MASTER_VOLUME_DB)
   const slots = new Map<string, Slot>(
-    instruments.map((instrument) => [instrument.id, createSlot(instrument, context, bus)]),
+    instruments.map((instrument) => [
+      instrument.id,
+      createSlot(instrument, context, mix.input(instrument.id)),
+    ]),
   )
-  const ready = Promise.all([...slots.values()].map((slot) => slot.voice.ready))
+  const ready = Promise.all([mix.ready, ...[...slots.values()].map((slot) => slot.voice.ready)])
   // Report a failed load straight away; play() still rejects with it so the UI shows it too.
   void ready.catch((reason: unknown) => console.error('instrument samples failed to load', reason))
 
@@ -106,7 +109,9 @@ export function createBand(instruments: readonly Instrument[], onNote: NoteListe
       }, `${Math.round(note.ticks * scale)}i`)
     })
     const lastTick = Math.max(0, ...track.notes.map((note) => note.ticks + note.durationTicks))
-    slot.beats = Math.ceil(lastTick / midi.header.ppq) // whole beats: one per IR row
+    // The backend ends every part at the song length; fall back to the last note for other files.
+    const endTick = track.endOfTrackTicks ?? lastTick
+    slot.beats = Math.ceil(Math.max(endTick, lastTick) / midi.header.ppq)
     updateLoop()
   }
 
@@ -129,8 +134,7 @@ export function createBand(instruments: readonly Instrument[], onNote: NoteListe
       transport.stop()
       transport.cancel()
       slots.forEach((slot) => slot.voice.dispose())
-      bus.disconnect()
-      master.dispose()
+      mix.dispose()
       toneContext.dispose() // also closes the AudioContext
     },
   }

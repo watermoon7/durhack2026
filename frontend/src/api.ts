@@ -18,16 +18,20 @@ const InstrumentSchema = z.object({
   octaves: z.number().int().positive(),
 })
 
+const unit = z.number().min(0).max(1)
+
 const IRBeatSchema = z.object({
   date: z.string(),
-  level: z.number().min(0).max(1),
-  activity: z.number().min(0).max(1),
-  intensity: z.number().min(0).max(1),
+  level: unit,
+  swing: unit,
+  activity: unit,
+  intensity: unit,
 })
 
 const IRSeriesSchema = z.object({
   source: z.string(),
   beats: z.array(IRBeatSchema).min(1),
+  bars: z.array(z.object({ mood: unit })).min(1),
 })
 
 export type Dataset = z.infer<typeof DatasetSchema>

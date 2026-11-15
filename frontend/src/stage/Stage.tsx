@@ -1,6 +1,6 @@
 import type { Dataset, Instrument } from '../api'
 import type { JSX } from 'react'
-import { BassArt, HihatArt, KickArt, SnareArt, SynthArt } from './art'
+import { BassArt, GuitarArt, HihatArt, KickArt, PadArt, SnareArt, SynthArt } from './art'
 import { Defs } from './Defs'
 import { PLACEMENTS, POOLS, STAGE_HEIGHT, STAGE_WIDTH } from './layout'
 import { Piece } from './Piece'
@@ -13,6 +13,8 @@ const ART: Readonly<Record<string, () => JSX.Element>> = {
   hihat: HihatArt,
   synth: SynthArt,
   bass: BassArt,
+  pad: PadArt,
+  guitar: GuitarArt,
 }
 
 interface StageProps {

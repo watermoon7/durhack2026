@@ -1,7 +1,8 @@
 /**
  * Instrument art in stage coordinates (see layout.ts). Pure drawings: no state, no events.
  * Colours follow the real instruments: red lacquered shells, brass cymbals, chrome hardware,
- * a black synth with wood cheeks, a sunburst bass with a rosewood board.
+ * a black synth with wood cheeks, a sunburst bass with a rosewood board, a cream pad synth with
+ * blue faders, and a natural-wood acoustic guitar.
  */
 
 const CHROME = '#c9ced4'
@@ -151,3 +152,70 @@ export function BassArt() {
   )
 }
 
+
+/** Pad synth: a cream keyboard with blue faders, drawn into its 270x120 outline at (530, 250). */
+export function PadArt() {
+  const faders = [0, 1, 2, 3, 4].map((i) => (
+    <g key={i}>
+      <rect x={22 + i * 22} y={20} width={4} height={30} rx={2} fill="#9fb3c8" />
+      <rect x={17 + i * 22} y={22 + ((i * 7) % 20)} width={14} height={7} rx={2} fill="#5aa9e6" />
+    </g>
+  ))
+  const whites = Array.from({ length: 12 }, (_, i) => (
+    <rect key={i} x={15 + i * 20} y={60} width={20} height={48} rx={2} />
+  ))
+  const blacks = [1, 2, 4, 5, 6, 8, 9, 11].map((i) => (
+    <rect key={i} x={15 + i * 20 - 6} y={60} width={12} height={28} rx={2} />
+  ))
+  return (
+    <g transform="translate(530 250)">
+      <rect x={4} y={6} width={262} height={108} rx={10} fill="#f3eee2" stroke="#d8cfbd" strokeWidth={2} />
+      <rect x={4} y={6} width={262} height={8} rx={4} fill="#5aa9e6" />
+      {faders}
+      <rect x={140} y={22} width={110} height={26} rx={4} fill="#1d2b3a" />
+      <path d="M146 40 Q160 26 174 36 T202 34 T244 30" stroke="#ffd23f" strokeWidth={2} fill="none" />
+      <g fill="#fbfaf6" stroke="#1d2b3a" strokeWidth={1.2}>{whites}</g>
+      <g fill="#1d2b3a">{blacks}</g>
+    </g>
+  )
+}
+
+/** Acoustic guitar, vertical, natural wood with a round sound hole, drawn at 160x420 from (820, 50). */
+export function GuitarArt() {
+  const frets = [98, 119, 139, 158, 176, 193, 209, 224, 238]
+  const strings = [72, 75.2, 78.4, 81.6, 84.8, 88]
+  return (
+    <g transform="translate(820 50)">
+      <path d="M66 76 L63 18 C63 6 97 6 97 18 L94 76 Z" fill="#8a5632" />
+      <g fill={CHROME}>
+        {[22, 38, 54].map((y) => (
+          <g key={y}>
+            <circle cx={57} cy={y} r={4.5} />
+            <circle cx={103} cy={y} r={4.5} />
+          </g>
+        ))}
+      </g>
+      <rect x={68} y={72} width={24} height={176} fill="#8a5632" />
+      <rect x={70} y={76} width={20} height={168} fill="#3b2416" />
+      <g stroke={CHROME} strokeWidth={1.2}>
+        {frets.map((y) => (
+          <line key={y} x1={70} y1={y} x2={90} y2={y} />
+        ))}
+      </g>
+      <path
+        d="M80 236 C52 220 18 232 20 266 C22 296 42 304 36 324 C24 352 10 366 16 392 C24 418 60 420 80 414 C100 420 136 418 144 392 C150 366 136 352 124 324 C118 304 138 296 140 266 C142 232 108 220 80 236 Z"
+        fill="#e2b77a"
+        stroke="#a87444"
+        strokeWidth={3}
+      />
+      <circle cx={80} cy={296} r={22} fill="#e2b77a" stroke="#a87444" strokeWidth={4} />
+      <circle cx={80} cy={296} r={17} fill="#2a1a10" />
+      <rect x={60} y={360} width={40} height={10} rx={3} fill="#3b2416" />
+      <g stroke="#f4efe4" strokeWidth={0.9}>
+        {strings.map((x) => (
+          <line key={x} x1={x} y1={18} x2={x} y2={366} />
+        ))}
+      </g>
+    </g>
+  )
+}

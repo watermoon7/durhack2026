@@ -41,13 +41,23 @@ export const PLACEMENTS: Readonly<Record<string, PiecePlacement>> = {
     outline: { kind: 'rect', x: 990, y: 44, width: 140, height: 432, rx: 28 },
     tag: { x: 1060, y: 500 },
   },
+  pad: {
+    outline: { kind: 'rect', x: 530, y: 250, width: 270, height: 120, rx: 14 },
+    tag: { x: 665, y: 228 },
+  },
+  guitar: {
+    outline: { kind: 'rect', x: 830, y: 44, width: 140, height: 432, rx: 28 },
+    tag: { x: 900, y: 500 },
+  },
 }
 
-/** Soft light pools, one per zone (drums, synth, bass). */
+/** Soft light pools, one per zone (drums, synth, bass, pad, guitar). */
 export const POOLS = [
   { cx: 290, cy: 280, rx: 250, ry: 160 },
   { cx: 600, cy: 498, rx: 230, ry: 95 },
   { cx: 1060, cy: 262, rx: 120, ry: 232 },
+  { cx: 665, cy: 310, rx: 170, ry: 90 },
+  { cx: 900, cy: 262, rx: 110, ry: 232 },
 ] as const
 
 export const PLAY = { cx: 600, cy: 80, r: 34, ringR: 42 } as const

@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 market-band-fetch = "market_band.fetch:main"
+market-band-fetch-scenarios = "market_band.fetch:main_scenarios"
 market-band-serve = "market_band.api:main"
 
 [build-system]

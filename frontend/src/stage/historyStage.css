@@ -1,0 +1,6 @@
+.app { grid-template-rows: auto auto auto; align-content: start; }
+.stage { max-height: 55vh; }
+.app details pre { max-height: 12rem; overflow: auto; }
+.tray { min-height: 110px; box-sizing: border-box; padding: 16px; }
+.tray__empty { margin: 0; max-width: 850px; text-align: center; }
+.stock__ticker { font-size: 17px; }

@@ -61,3 +61,10 @@ export const POOLS = [
 ] as const
 
 export const PLAY = { cx: 600, cy: 80, r: 34, ringR: 42 } as const
+
+/** The Voice piece (a mic, bottom-left): a toggle, not a drop target, so it sits apart. */
+export const VOICE = {
+  outline: { x: 156, y: 420, width: 128, height: 160, rx: 22 },
+  tag: { x: 220, y: 600 },
+  pool: { cx: 220, cy: 510, rx: 120, ry: 90 },
+} as const

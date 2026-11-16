@@ -1,0 +1,160 @@
+/* Scenario menu (start screen), adapted from the adding-menu branch's event picker. */
+
+.scenario-menu {
+  box-sizing: border-box;
+  max-width: 960px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: clamp(28px, 6vh, 64px) 28px;
+}
+
+.scenario-menu__header {
+  margin-bottom: 30px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.brand__mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--yellow);
+  font-size: 20px;
+}
+
+.scenario-menu__header h1 {
+  margin: 22px 0 0;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+
+.scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.scenario-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 92px;
+  box-sizing: border-box;
+  padding: 20px;
+  border: 1px solid #fff;
+  border-radius: 14px;
+  background: #f7fbff;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background 150ms, transform 150ms, box-shadow 150ms;
+}
+
+.scenario-card:hover {
+  background: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px #1d2b3a0c;
+}
+
+.scenario-card__text {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scenario-card h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.scenario-card__meta {
+  color: #536e83;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.scenario-card__arrow {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: #536e83;
+  font-size: 22px;
+}
+
+.scenario-card:hover .scenario-card__arrow {
+  color: var(--ink);
+}
+
+.scenario-menu a:focus-visible,
+.scenario-menu button:focus-visible,
+.scenario-back:focus-visible {
+  outline: 3px solid #b67d00;
+  outline-offset: 4px;
+}
+
+.scenario-menu__error {
+  margin-top: 20px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.scenario-menu__error button {
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--yellow);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* Back to the menu, top-right of the stage (the genre dropdown holds top-left). */
+.scenario-back {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 2;
+  max-width: calc(100vw - 180px);
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: #ffffffa6;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scenario-back:hover {
+  background: #fff;
+}
+
+@media (max-width: 600px) {
+  .scenario-menu {
+    padding: 28px 16px;
+  }
+
+  .scenario-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .scenario-card {
+    min-height: 72px;
+    padding: 16px;
+  }
+}

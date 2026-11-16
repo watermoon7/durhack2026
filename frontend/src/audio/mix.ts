@@ -7,7 +7,7 @@
  */
 
 import * as Tone from 'tone'
-import { COMPRESSOR, LIMITER_DB, MIX_PRESETS, REVERB_DECAY_S, type MixPreset } from '../config'
+import { COMPRESSOR, GENRE_MIX, LIMITER_DB, REVERB_DECAY_S, type MixPreset } from '../config'
 
 export interface Mix {
   /** Resolves once the reverb's impulse response has been generated. */
@@ -23,13 +23,20 @@ interface Channel {
 }
 
 /** Look up an instrument's mix preset, failing loudly so no instrument plays silently dry. */
-function presetFor(instrumentId: string): MixPreset {
-  const preset = MIX_PRESETS[instrumentId]
-  if (preset === undefined) throw new Error(`no mix preset for instrument '${instrumentId}'`)
+function presetFor(genre: string, instrumentId: string): MixPreset {
+  const presets = GENRE_MIX[genre]
+  if (presets === undefined) throw new Error(`no mix presets for genre '${genre}'`)
+  const preset = presets[instrumentId]
+  if (preset === undefined) {
+    throw new Error(`no mix preset for instrument '${instrumentId}' in genre '${genre}'`)
+  }
   if (!(preset.reverbSend >= 0 && preset.reverbSend <= 1)) {
     throw new Error(`${instrumentId}: reverbSend ${preset.reverbSend} outside [0, 1]`)
   }
   if (!(preset.highpassHz >= 0)) throw new Error(`${instrumentId}: highpassHz must be >= 0`)
+  if (preset.level !== undefined && !(preset.level > 0 && Number.isFinite(preset.level))) {
+    throw new Error(`${instrumentId}: level ${preset.level} must be a positive number`)
+  }
   return preset
 }
 
@@ -41,6 +48,7 @@ function createChannel(
   reverb: Tone.Reverb,
 ): Channel {
   const input = context.createGain()
+  input.gain.value = preset.level ?? 1
   const eq = new Tone.EQ3(preset.eqDb)
   const send = new Tone.Gain(preset.reverbSend)
   const nodes: Tone.ToneAudioNode[] = [eq, send]
@@ -58,16 +66,17 @@ function createChannel(
   return { input, nodes }
 }
 
-/** Create the mixer for the given instruments. Must run after Tone.setContext(). */
+/** Create the mixer for the given instruments in a genre. Must run after Tone.setContext(). */
 export function createMix(
   context: AudioContext,
   instrumentIds: readonly string[],
+  genre: string,
   masterVolumeDb: number,
 ): Mix {
   if (instrumentIds.length === 0) throw new Error('a mix needs at least one instrument')
   if (new Set(instrumentIds).size !== instrumentIds.length) throw new Error('duplicate instrument id')
   if (!Number.isFinite(masterVolumeDb)) throw new Error(`invalid master volume ${masterVolumeDb}`)
-  const presets = instrumentIds.map((id) => [id, presetFor(id)] as const) // validate before building
+  const presets = instrumentIds.map((id) => [id, presetFor(genre, id)] as const) // validate first
 
   const masterBus = new Tone.Gain(1)
   const reverb = new Tone.Reverb({ decay: REVERB_DECAY_S, wet: 1 })

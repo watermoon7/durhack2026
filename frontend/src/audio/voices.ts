@@ -80,7 +80,10 @@ function createPitched(preset: PitchedPreset, context: AudioContext, output: Aud
   }
 }
 
-/** One drum-machine sample, retuned by the backend note; it rings for its natural length. */
+/**
+ * One drum-machine sample, retuned by the backend note; it rings for its natural length.
+ * Accent notes (Rock crash and toms) play their own sample untuned instead.
+ */
 function createDrum(
   preset: DrumPreset,
   rootMidi: number,
@@ -96,12 +99,13 @@ function createDrum(
   return {
     ...lifecycle(player),
     trigger: (midi, _durationSeconds, time, velocity) => {
+      const accent = preset.accents?.[midi]
       // The returned stop function is not needed: a re-trigger cuts the previous hit.
       void player.start({
-        note: preset.sample,
+        note: accent ?? preset.sample,
         velocity: toMidiVelocity(velocity),
         time,
-        detune: drumCents(midi, rootMidi),
+        detune: accent === undefined ? drumCents(midi, rootMidi) : 0,
       })
     },
   }

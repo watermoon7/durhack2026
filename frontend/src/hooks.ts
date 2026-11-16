@@ -3,11 +3,16 @@ import type { Band } from './audio/band'
 import { PULSE_MS } from './config'
 
 /**
- * Track the transport position once per animation frame while playing.
- * The rAF loop terminates when `playing` turns false or the component unmounts.
+ * Track the transport position once per animation frame while playing. The rAF loop terminates
+ * when `playing` turns false or the component unmounts. While paused the last position is kept;
+ * call the returned `refresh` after anything that moves the playhead without playing (pause,
+ * stop, seek). The beat is null until a band exists.
  */
-export function usePlayhead(band: Band | null, playing: boolean): number | null {
+export function usePlayhead(band: Band | null, playing: boolean): [number | null, () => void] {
   const [beat, setBeat] = useState<number | null>(null)
+  const refresh = useCallback((): void => {
+    if (band !== null) setBeat(band.currentBeat())
+  }, [band])
   useEffect(() => {
     if (band === null || !playing) return
     let frame = 0
@@ -18,7 +23,7 @@ export function usePlayhead(band: Band | null, playing: boolean): number | null 
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
   }, [band, playing])
-  return playing ? beat : null
+  return [band === null ? null : beat, refresh]
 }
 
 /**

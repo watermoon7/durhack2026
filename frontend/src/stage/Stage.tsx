@@ -5,6 +5,7 @@ import { Defs } from './Defs'
 import { PLACEMENTS, POOLS, STAGE_HEIGHT, STAGE_WIDTH } from './layout'
 import { Piece } from './Piece'
 import { PlayButton } from './PlayButton'
+import { VoicePiece } from './VoicePiece'
 
 /** Art component per backend instrument id. */
 const ART: Readonly<Record<string, () => JSX.Element>> = {
@@ -28,11 +29,14 @@ interface StageProps {
   readonly onAssign: (instrumentId: string, datasetId: string) => void
   readonly onClear: (instrumentId: string) => void
   readonly onTogglePlay: () => void
+  /** The scenario's sung track and whether it is on, or null when the scenario has none. */
+  readonly voice: { readonly on: boolean; readonly title: string } | null
+  readonly onToggleVoice: () => void
 }
 
 /** The whole stage: room, light pools, play button and every band member. */
 export function Stage(props: StageProps) {
-  const { instruments, datasets, assignments, lit, playing, progress } = props
+  const { instruments, datasets, assignments, lit, playing, progress, voice } = props
   const tickerFor = (instrumentId: string): string | null => {
     const datasetId = assignments[instrumentId]
     return datasets.find((d) => d.id === datasetId)?.ticker ?? null
@@ -46,7 +50,7 @@ export function Stage(props: StageProps) {
       ))}
       <PlayButton
         playing={playing}
-        disabled={Object.keys(assignments).length === 0}
+        disabled={Object.keys(assignments).length === 0 && voice?.on !== true}
         progress={progress}
         onToggle={props.onTogglePlay}
       />
@@ -68,6 +72,7 @@ export function Stage(props: StageProps) {
           </Piece>
         )
       })}
+      {voice !== null && <VoicePiece on={voice.on} title={voice.title} onToggle={props.onToggleVoice} />}
     </svg>
   )
 }

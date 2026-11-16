@@ -27,6 +27,16 @@ Each stock picks its own chords, so instruments carrying stocks that move togeth
 
 16 bars of 4 beats at 120 bpm = 32 s, looped. Q1 2020 (62 trading days) is stretched onto the 64 beats.
 
+### Genres
+
+Pick a genre from the dropdown, top-left. Switching while playing keeps the band and the beat. Rock is the only genre for now (Default was removed; its sounds and mix are still the base Rock builds on).
+
+| Genre | Changes |
+|---|---|
+| Rock | distorted guitar plays power chords; pick bass; rock organ on the pad; LinnDrum kit with a crash after busy bars and a tom fill on busy fourth beats |
+
+Add a genre with one entry in `GENRES` (backend `config.py`) and one in each of `GENRE_SOUNDS` and `GENRE_MIX` (frontend `config.ts`).
+
 ## Run
 
 ```bash

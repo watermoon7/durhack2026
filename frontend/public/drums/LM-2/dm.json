@@ -1,0 +1,18 @@
+{
+  "baseUrl": "https://smpldsnds.github.io/drum-machines/LM-2/",
+  "name": "lm-2",
+  "samples": [
+    "kick",
+    "snare-m",
+    "hhclosed",
+    "crash",
+    "tom-hh",
+    "tom-h",
+    "tom-m",
+    "tom-l"
+  ],
+  "formats": [
+    "ogg",
+    "m4a"
+  ]
+}

@@ -1,7 +1,8 @@
 .app {
   min-height: 100%;
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: 1fr auto auto;
+  --scrubber-height: 44px;
 }
 
 /* ---------- Stage ---------- */
@@ -10,7 +11,7 @@
   display: block;
   width: 100%;
   max-width: 1400px;
-  max-height: calc(100vh - 140px);
+  max-height: calc(100vh - 140px - var(--scrubber-height));
   margin: 0 auto;
   user-select: none;
 }
@@ -123,6 +124,94 @@
   transform: none;
 }
 
+/* ---------- Progress bar (stage/Scrubber.tsx) ---------- */
+
+.scrubber {
+  box-sizing: border-box;
+  height: var(--scrubber-height);
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scrubber__time {
+  min-width: 2.6em;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.scrubber--disabled {
+  opacity: 0.45;
+}
+
+/* Track filled up to --fill (set inline) in ink, the rest faint, matching the play ring. */
+.scrubber__range {
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.scrubber__range:disabled {
+  cursor: default;
+}
+
+.scrubber__range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--ink) var(--fill), rgba(29, 43, 58, 0.12) var(--fill));
+}
+
+.scrubber__range::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--ink) var(--fill), rgba(29, 43, 58, 0.12) var(--fill));
+}
+
+.scrubber__range::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--yellow);
+  transition: transform 120ms;
+}
+
+.scrubber__range::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--yellow);
+  transition: transform 120ms;
+}
+
+.scrubber__range:not(:disabled):hover::-webkit-slider-thumb,
+.scrubber__range:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+
+.scrubber__range:not(:disabled):hover::-moz-range-thumb,
+.scrubber__range:focus-visible::-moz-range-thumb {
+  transform: scale(1.15);
+}
+
+.scrubber__range:focus {
+  outline: none;
+}
+
 /* ---------- Tray ---------- */
 
 .tray {
@@ -207,4 +296,83 @@
   color: #fff;
   font-size: 14px;
   cursor: pointer;
+}
+
+/* ---------- Genre dropdown ---------- */
+
+.genre {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 2;
+}
+
+/* Visually hidden, still read by screen readers: the stage keeps tickers as its only text. */
+.genre__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.genre__select {
+  appearance: none;
+  padding: 8px 34px 8px 14px;
+  border: 2px solid var(--ring);
+  border-radius: 999px;
+  background: #fff
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%231d2b3a' stroke-width='2'/%3E%3C/svg%3E")
+    no-repeat right 12px center;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.genre__select:hover,
+.genre__select:focus-visible {
+  border-color: var(--ink);
+  outline: none;
+}
+
+.genre__select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---------- Voice toggle (stage/VoicePiece.tsx) ---------- */
+
+.voice {
+  cursor: pointer;
+}
+
+.voice:focus {
+  outline: none;
+}
+
+.voice:focus-visible .piece__ring {
+  stroke: var(--line);
+}
+
+/* Off: a light pill, so it reads as a switch rather than a filled piece. */
+.voice:not(.voice--on) .voice__tag rect {
+  fill: #fff;
+  stroke: var(--ring);
+  stroke-width: 2;
+}
+
+.voice:not(.voice--on) .voice__tag text {
+  fill: var(--ink);
+}
+
+/* The pill toggles too; don't borrow the red "remove" hover from stock tags. */
+.voice .voice__tag:hover rect {
+  fill: var(--ink);
+}
+
+.voice:not(.voice--on) .voice__tag:hover rect {
+  fill: #fff7d6;
 }

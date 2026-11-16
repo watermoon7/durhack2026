@@ -8,7 +8,7 @@ interface PlayButtonProps {
   readonly onToggle: () => void
 }
 
-/** Round play/stop button with a progress ring tracing the loop. */
+/** Round play/pause button with a progress ring tracing the loop. */
 export function PlayButton({ playing, disabled, progress, onToggle }: PlayButtonProps) {
   if (!(progress >= 0 && progress <= 1)) throw new Error(`progress ${progress} outside [0, 1]`)
   const { cx, cy, r, ringR } = PLAY
@@ -20,7 +20,7 @@ export function PlayButton({ playing, disabled, progress, onToggle }: PlayButton
     <g
       className={`play${disabled ? ' play--disabled' : ''}`}
       role="button"
-      aria-label={playing ? 'Stop' : 'Play'}
+      aria-label={playing ? 'Pause' : 'Play'}
       aria-disabled={disabled}
       tabIndex={disabled ? -1 : 0}
       onClick={activate}
@@ -41,7 +41,10 @@ export function PlayButton({ playing, disabled, progress, onToggle }: PlayButton
       )}
       <circle className="play__face" cx={cx} cy={cy} r={r} />
       {playing ? (
-        <rect className="play__icon" x={cx - 11} y={cy - 11} width={22} height={22} rx={3} />
+        <>
+          <rect className="play__icon" x={cx - 12} y={cy - 14} width={8} height={28} rx={2} />
+          <rect className="play__icon" x={cx + 4} y={cy - 14} width={8} height={28} rx={2} />
+        </>
       ) : (
         <path className="play__icon" d={`M${cx - 9} ${cy - 16} L${cx - 9} ${cy + 16} L${cx + 17} ${cy} Z`} />
       )}

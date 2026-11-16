@@ -52,7 +52,7 @@ def test_stock_to_ir_rejects_non_positive_prices() -> None:
 
 
 def test_scale_spans_two_octaves_of_pentatonic() -> None:
-    assert scale_notes(KEYS) == (48, 50, 52, 55, 57, 60, 62, 64, 67, 69, 72)
+    assert scale_notes(KEYS) == (48, 51, 53, 55, 58, 60, 63, 65, 67, 70, 72)
 
 
 def test_beat_extremes_map_to_range_ends_and_subdivisions() -> None:

@@ -2,15 +2,22 @@ import hashlib
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import ir_with_activity
 
 from market_band.algorithm import render_midi, render_notes
 from market_band.api import app, build_ir
 from market_band.chords import power_voicing
-from market_band.config import BEATS_PER_BAR, INSTRUMENTS, DatasetConfig, InstrumentConfig
+from market_band.config import (
+    BEATS_PER_BAR,
+    DRUM_ACCENT_NOTES,
+    INSTRUMENTS,
+    DatasetConfig,
+    InstrumentConfig,
+)
 from market_band.harmony import bar_chords, chord_for_mood
 
-# Fingerprint of every Default part before genres existed (see the genres plan).
-DEFAULT_FINGERPRINT = "19470c3bda251b638db778904a2784692af011f290afb72e6686172012a1b82e"
+# Fingerprint of every part in the default genre (Rock), re-pinned when Default was removed.
+DEFAULT_FINGERPRINT = "3aff321ac02a51726cce59476a66c688a4ce143f61b59ba8c8c7cc8e9de7fbb6"
 PINNED_DATASETS = ("spy", "aapl", "tsla", "gld", "tlt")
 PINNED_INSTRUMENTS = ("kick", "snare", "hihat", "synth", "bass", "pad", "guitar")
 GUITAR = next(i for i in INSTRUMENTS if i.id == "guitar")
@@ -29,15 +36,15 @@ def test_default_midi_is_byte_identical() -> None:
     assert digest.hexdigest() == DEFAULT_FINGERPRINT
 
 
-def test_render_midi_genre_default_matches_no_genre() -> None:
+def test_render_midi_without_genre_plays_rock() -> None:
     ir = build_ir("spy")
     for instrument in INSTRUMENTS:
-        assert render_midi(ir, instrument) == render_midi(ir, instrument, "default")
+        assert render_midi(ir, instrument) == render_midi(ir, instrument, "rock")
 
 
 def test_power_voicing_values() -> None:
-    assert power_voicing(chord_for_mood(0.0)) == (40, 47, 52)  # E5
-    assert power_voicing(chord_for_mood(0.75)) == (48, 55, 60)  # C5
+    assert power_voicing(chord_for_mood(0.0)) == (43, 50, 55)  # G5
+    assert power_voicing(chord_for_mood(0.25)) == (48, 55, 60)  # C5
 
 
 @pytest.mark.parametrize("dataset", DEMO, ids=lambda d: d.id)
@@ -58,7 +65,7 @@ def test_unknown_genre_raises() -> None:
 def test_api_lists_genres() -> None:
     response = TestClient(app).get("/api/genres")
     assert response.status_code == 200
-    assert response.json() == [{"id": "default", "name": "Default"}, {"id": "rock", "name": "Rock"}]
+    assert response.json() == [{"id": "rock", "name": "Rock"}]
 
 
 def test_api_unknown_genre_404() -> None:
@@ -66,14 +73,40 @@ def test_api_unknown_genre_404() -> None:
     assert TestClient(app).get("/api/midi", params=params).status_code == 404
 
 
-def test_api_rock_guitar_differs_from_default() -> None:
-    client = TestClient(app)
+# --- Rock drum accents --------------------------------------------------------------------
 
-    def midi(instrument_id: str, genre: str) -> bytes:
-        params = {"dataset_id": "spy", "instrument_id": instrument_id, "genre": genre}
-        response = client.get("/api/midi", params=params)
-        assert response.status_code == 200
-        return bytes(response.content)
+ACCENTS = set(DRUM_ACCENT_NOTES.values())
+TOMS = [DRUM_ACCENT_NOTES[k] for k in ("tom_hh", "tom_h", "tom_m", "tom_l")]
+CRASH = DRUM_ACCENT_NOTES["crash"]
 
-    assert midi("guitar", "rock") != midi("guitar", "default")
-    assert midi("synth", "rock") == midi("synth", "default")
+
+def test_accent_notes_are_outside_every_drum_tuning_range() -> None:
+    for part in (i for i in INSTRUMENTS if i.role == "drum"):
+        tuning = set(range(part.root_midi, part.root_midi + 12 * part.octaves + 1))
+        assert not set(TOMS) & tuning, f"a tom note collides with {part.id}'s tuning"
+    assert CRASH not in range(by_id("hihat").root_midi, by_id("hihat").root_midi + 13)
+
+
+def test_rock_snare_fills_on_busy_fourth_beats() -> None:
+    notes = render_notes(ir_with_activity([0.1, 0.1, 0.1, 0.9] * 2), by_id("snare"), "rock")
+    for beat in (3, 7):
+        in_beat = sorted(
+            (n for n in notes if beat <= n.start_beat < beat + 1), key=lambda n: n.start_beat
+        )
+        assert [n.start_beat for n in in_beat] == [beat, beat + 0.25, beat + 0.5, beat + 0.75]
+        assert [n.midi for n in in_beat] == TOMS
+
+
+def test_rock_crash_follows_busy_bars() -> None:
+    notes = render_notes(ir_with_activity([0.9] * 4 + [0.1] * 4), by_id("hihat"), "rock")
+    crashes = [n.start_beat for n in notes if n.midi == CRASH]
+    # Bar 1 follows a busy bar. Bar 0 follows bar 1 (the loop), which is calm.
+    assert crashes == [4.0]
+
+
+@pytest.mark.parametrize("dataset", DEMO, ids=lambda d: d.id)
+def test_rock_drums_accents_only_on_their_pieces(dataset: DatasetConfig) -> None:
+    ir = build_ir(dataset.id)
+    assert not {n.midi for n in render_notes(ir, by_id("kick"), "rock")} & ACCENTS
+    assert {n.midi for n in render_notes(ir, by_id("snare"), "rock")} & ACCENTS <= set(TOMS)
+    assert {n.midi for n in render_notes(ir, by_id("hihat"), "rock")} & ACCENTS <= {CRASH}

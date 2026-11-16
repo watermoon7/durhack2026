@@ -1,14 +1,14 @@
-"""Harmony: each stock's bar mood picks one of six C-major chords.
+"""Harmony: each stock's bar mood picks one of six C-minor chords.
 
 The chord sets the notes the parts may use in that bar. The chords sit on a line from bright
-to dark (IV, I, V, ii, vi, iii: stacked fifths), so a rising bar plays a bright major chord
+to dark (VI, III, VII, iv, i, v: stacked fifths), so a rising bar plays a bright major chord
 and a falling bar a dark minor one. Two stocks that move
 together land on the same or neighbouring chords; stocks that diverge land far apart and clash.
 """
 
 from dataclasses import dataclass
 
-from market_band.config import CHORD_LINE, MAJOR_SCALE, SCALE_INTERVALS
+from market_band.config import CHORD_LINE, KEY_SCALE, SCALE_INTERVALS
 from market_band.ir import IRSeries
 
 
@@ -22,17 +22,17 @@ class Chord:
 
 
 def triad(degree: int) -> Chord:
-    """Build the C-major triad on a scale degree (0 = C ... 6 = B)."""
-    if not 0 <= degree < len(MAJOR_SCALE):
+    """Build the C-minor triad on a scale degree (0 = C ... 6 = Bb)."""
+    if not 0 <= degree < len(KEY_SCALE):
         raise ValueError(f"scale degree {degree} outside the scale")
-    steps = len(MAJOR_SCALE)
-    root, third, fifth = (MAJOR_SCALE[(degree + k) % steps] for k in (0, 2, 4))
+    steps = len(KEY_SCALE)
+    root, third, fifth = (KEY_SCALE[(degree + k) % steps] for k in (0, 2, 4))
     minor = (third - root) % 12 == 3
     return Chord(degree, (root, third, fifth), minor)
 
 
 def chord_for_mood(mood: float) -> Chord:
-    """Pick the chord for a bar: mood 1 -> brightest (IV), mood 0 -> darkest (iii)."""
+    """Pick the chord for a bar: mood 1 -> brightest (VI), mood 0 -> darkest (v)."""
     if not 0.0 <= mood <= 1.0:
         raise ValueError(f"mood {mood} outside [0, 1]")
     slots = len(CHORD_LINE)
@@ -48,7 +48,7 @@ def bar_chords(ir: IRSeries) -> tuple[Chord, ...]:
 def pool_notes(chord: Chord, low: int, high: int, strong: bool) -> tuple[int, ...]:
     """List the MIDI notes in [low, high] a melody may use, ascending.
 
-    Strong beats get chord tones only; other beats add C major pentatonic.
+    Strong beats get chord tones only; other beats add C minor pentatonic.
     """
     if low > high:
         raise ValueError(f"empty range {low}..{high}")

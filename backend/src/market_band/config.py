@@ -80,7 +80,7 @@ def _fx(id_: str, ticker: str, name: str) -> DatasetConfig:
     return DatasetConfig(id=id_, ticker=ticker, name=name, has_volume=False)
 
 
-SCENARIOS: tuple[ScenarioConfig, ...] = (
+_CROSS_ASSET_SCENARIOS: tuple[ScenarioConfig, ...] = (
     ScenarioConfig(
         id="2010_flash_crash",
         name="2010 Flash Crash",
@@ -200,6 +200,99 @@ SCENARIOS: tuple[ScenarioConfig, ...] = (
     ),
 )
 
+# Local-market scenarios, from legacy/local_market_periods.json (main branch): each band is one
+# market's headline index plus five large local stocks, over that file's exact windows. 10 are
+# crashes and 5 are calm 2017 controls to compare them against. Real daily OHLCV only: the minute
+# data that file's generator simulates is not used. Short windows are stretched onto the 16 bars.
+_US_BASKET: tuple[DatasetConfig, ...] = (
+    _fx("sp500", "^GSPC", "S&P 500 Index"),
+    DatasetConfig(id="aapl", ticker="AAPL", name="Apple"),
+    DatasetConfig(id="jpm", ticker="JPM", name="JPMorgan Chase"),
+    DatasetConfig(id="xom", ticker="XOM", name="ExxonMobil"),
+    DatasetConfig(id="jnj", ticker="JNJ", name="Johnson & Johnson"),
+    DatasetConfig(id="wmt", ticker="WMT", name="Walmart"),
+)
+_JP_BASKET: tuple[DatasetConfig, ...] = (
+    _fx("nikkei", "^N225", "Nikkei 225 Index"),
+    DatasetConfig(id="toyota", ticker="7203.T", name="Toyota"),
+    DatasetConfig(id="sony", ticker="6758.T", name="Sony"),
+    DatasetConfig(id="mufg", ticker="8306.T", name="Mitsubishi UFJ"),
+    DatasetConfig(id="takeda", ticker="4502.T", name="Takeda"),
+    DatasetConfig(id="nintendo", ticker="7974.T", name="Nintendo"),
+)
+_CN_BASKET: tuple[DatasetConfig, ...] = (
+    _fx("sse", "000001.SS", "SSE Composite Index"),
+    DatasetConfig(id="moutai", ticker="600519.SS", name="Kweichow Moutai"),
+    DatasetConfig(id="cmb", ticker="600036.SS", name="China Merchants Bank"),
+    DatasetConfig(id="sinopec", ticker="600028.SS", name="Sinopec"),
+    DatasetConfig(id="yangtze", ticker="600900.SS", name="China Yangtze Power"),
+    DatasetConfig(id="pingan", ticker="601318.SS", name="Ping An Insurance"),
+)
+_UK_BASKET: tuple[DatasetConfig, ...] = (
+    _fx("ftse", "^FTSE", "FTSE 100 Index"),
+    DatasetConfig(id="hsbc", ticker="HSBA.L", name="HSBC"),
+    DatasetConfig(id="bp", ticker="BP.L", name="BP"),
+    DatasetConfig(id="gsk", ticker="GSK.L", name="GSK"),
+    DatasetConfig(id="vod", ticker="VOD.L", name="Vodafone"),
+    DatasetConfig(id="unilever", ticker="ULVR.L", name="Unilever"),
+)
+_IN_BASKET: tuple[DatasetConfig, ...] = (
+    _fx("nifty", "^NSEI", "Nifty 50 Index"),
+    DatasetConfig(id="reliance", ticker="RELIANCE.NS", name="Reliance Industries"),
+    DatasetConfig(id="tcs", ticker="TCS.NS", name="Tata Consultancy Services"),
+    DatasetConfig(id="hdfc", ticker="HDFCBANK.NS", name="HDFC Bank"),
+    DatasetConfig(id="infy", ticker="INFY.NS", name="Infosys"),
+    DatasetConfig(id="itc", ticker="ITC.NS", name="ITC"),
+)
+
+
+def _local(
+    id_: str, name: str, start: str, end: str, basket: tuple[DatasetConfig, ...]
+) -> ScenarioConfig:
+    """Build a local-market scenario: one market's basket over a ``[start, end)`` window."""
+    assert start < end, f"empty window {start}..{end}"
+    assert len(basket) > 0, "basket must not be empty"
+    return ScenarioConfig(id=id_, name=name, start=start, end=end, datasets=basket)
+
+
+_LOCAL_MARKET_SCENARIOS: tuple[ScenarioConfig, ...] = (
+    _local("dotcom_2000", "2000 Dot-com Crash · US", "2000-03-01", "2000-07-01", _US_BASKET),
+    _local(
+        "financial_crisis_2008",
+        "2008 Financial Crisis · US",
+        "2008-09-01",
+        "2009-01-01",
+        _US_BASKET,
+    ),
+    _local("flash_crash_2010", "2010 Flash Crash · US", "2010-05-03", "2010-05-18", _US_BASKET),
+    _local(
+        "earthquake_2011", "2011 Tōhoku Earthquake · Japan", "2011-03-01", "2011-05-01", _JP_BASKET
+    ),
+    _local(
+        "china_crash_2015", "2015 China Stock Crash · China", "2015-06-01", "2015-09-01", _CN_BASKET
+    ),
+    _local(
+        "china_circuit_breakers_2016",
+        "2016 Circuit Breakers · China",
+        "2016-01-01",
+        "2016-03-01",
+        _CN_BASKET,
+    ),
+    _local("brexit_2016", "2016 Brexit Vote · UK", "2016-06-01", "2016-08-01", _UK_BASKET),
+    _local("q4_selloff_2018", "2018 Q4 Selloff · US", "2018-09-01", "2019-01-01", _US_BASKET),
+    _local("covid_2020", "2020 COVID Crash · India", "2020-02-01", "2020-05-01", _IN_BASKET),
+    _local(
+        "japan_august_2024", "2024 Yen Carry Unwind · Japan", "2024-07-01", "2024-09-01", _JP_BASKET
+    ),
+    _local("stable_us_2017", "2017 Calm · US", "2017-01-01", "2017-04-01", _US_BASKET),
+    _local("stable_jp_2017", "2017 Calm · Japan", "2017-06-01", "2017-09-01", _JP_BASKET),
+    _local("stable_cn_2017", "2017 Calm · China", "2017-01-01", "2017-04-01", _CN_BASKET),
+    _local("stable_uk_2017", "2017 Calm · UK", "2017-03-01", "2017-06-01", _UK_BASKET),
+    _local("stable_in_2017", "2017 Calm · India", "2017-04-01", "2017-07-01", _IN_BASKET),
+)
+
+SCENARIOS: tuple[ScenarioConfig, ...] = (*_CROSS_ASSET_SCENARIOS, *_LOCAL_MARKET_SCENARIOS)
+
 MIN_BEATS = 2  # a series shorter than this cannot be normalised meaningfully
 
 # --- Time grid and IR scales ------------------------------------------------
@@ -217,16 +310,17 @@ MOOD_RETURN_BOUND = 0.06  # bar log return of +/- this maps to mood 1.0 / 0.0
 TEMPO_BPM = 120
 TICKS_PER_BEAT = 480
 SCALE_ROOT_PITCH_CLASS = 0  # C
-SCALE_INTERVALS: tuple[int, ...] = (0, 2, 4, 7, 9)  # major pentatonic: nothing clashes (yet)
+SCALE_INTERVALS: tuple[int, ...] = (0, 3, 5, 7, 10)  # minor pentatonic: nothing clashes (yet)
 MELODIC_SUBDIVISIONS: tuple[int, ...] = (1, 2, 4)  # notes per beat for pitched instruments
 NOTE_LEGATO = 0.9  # fraction of a subdivision a note sounds for
 VELOCITY_FLOOR = 0.3  # quietest note as a fraction of full velocity
 MIDI_VELOCITY_MAX = 127
 
-# Harmony: C major. Chords are chosen per bar from each stock's mood (see harmony.py).
-MAJOR_SCALE: tuple[int, ...] = (0, 2, 4, 5, 7, 9, 11)
-# Scale degrees of the chord roots, bright to dark (stacked fifths): IV, I, V, ii, vi, iii.
-CHORD_LINE: tuple[int, ...] = (3, 0, 4, 1, 5, 2)
+# Harmony: C natural minor. Chords are chosen per bar from each stock's mood (see harmony.py).
+KEY_SCALE: tuple[int, ...] = (0, 2, 3, 5, 7, 8, 10)
+# Scale degrees of the chord roots, bright to dark (stacked fifths): VI, III, VII, iv, i, v
+# (Ab, Eb, Bb, Fm, Cm, Gm). The diminished ii (D F Ab) is left out.
+CHORD_LINE: tuple[int, ...] = (5, 2, 6, 3, 0, 4)
 
 # Lead melody (see lead.py).
 LEVEL_SMOOTH_BEATS = 5  # centred mean of level that sets the register (keeps the chart's shape)
@@ -265,12 +359,21 @@ class GenreConfig:
     name: str
 
 
-DEFAULT_GENRE = "default"
+DEFAULT_GENRE = "rock"
 # Rock: guitar plays power chords (chords.py); drums add accents (algorithm.py).
-GENRES: tuple[GenreConfig, ...] = (
-    GenreConfig(id=DEFAULT_GENRE, name="Default"),
-    GenreConfig(id="rock", name="Rock"),
-)
+# Rock is the only genre for now; the plain band's code paths stay for when it returns.
+GENRES: tuple[GenreConfig, ...] = (GenreConfig(id=DEFAULT_GENRE, name="Rock"),)
+# Rock drum accents, as General MIDI drum notes. Toms sit between the kick (24-36) and snare
+# (48-60) tuning ranges and the crash above the snare's, so no ordinary hit is mistaken for one.
+DRUM_ACCENT_NOTES: dict[str, int] = {
+    "crash": 49,
+    "tom_hh": 47,
+    "tom_h": 45,
+    "tom_m": 43,
+    "tom_l": 41,
+}
+# Which drum piece carries which accent in Rock: a tom fill on the snare, a crash on the hi-hat.
+ROCK_DRUM_ACCENTS: dict[str, Literal["fill", "crash"]] = {"snare": "fill", "hihat": "crash"}
 
 # Drums use a 1-octave range: level becomes a subtle tuning shift rather than a melody.
 INSTRUMENTS: tuple[InstrumentConfig, ...] = (
@@ -298,7 +401,8 @@ INSTRUMENTS: tuple[InstrumentConfig, ...] = (
         role="bass",
         subdivisions=MELODIC_SUBDIVISIONS,
     ),
-    InstrumentConfig(id="pad", name="Pad", root_midi=36, octaves=3, role="pad"),
+    # 4 octaves: the Bb voicing tops out at D5 (74), above a 3-octave range.
+    InstrumentConfig(id="pad", name="Pad", root_midi=36, octaves=4, role="pad"),
     InstrumentConfig(id="guitar", name="Guitar", root_midi=36, octaves=4, role="guitar"),
 )
 

@@ -14,8 +14,11 @@ from market_band.chords import guitar_voicing, pad_voicing, render_guitar
 from market_band.config import (
     BASS_MAX_REPEATS,
     DATASETS,
+    DEFAULT_GENRE,
+    DRUM_ACCENT_NOTES,
+    GENRES,
     INSTRUMENTS,
-    MAJOR_SCALE,
+    KEY_SCALE,
     SCALE_INTERVALS,
     SONG_BEATS,
     STRUM_GAP_BEATS,
@@ -38,9 +41,15 @@ def instrument(instrument_id: str) -> InstrumentConfig:
     return next(i for i in INSTRUMENTS if i.id == instrument_id)
 
 
-def in_key_and_range(notes: list[Note], part: InstrumentConfig) -> bool:
+def in_key_and_range(notes: list[Note], part: InstrumentConfig, genre: str = DEFAULT_GENRE) -> bool:
+    """Every note is in C minor and in range; Rock drum accents (GM drum notes) are exempt."""
     top = part.root_midi + 12 * part.octaves
-    return all(n.midi % 12 in MAJOR_SCALE and part.root_midi <= n.midi <= top for n in notes)
+    accents = genre == "rock" and part.role == "drum"
+    exempt = set(DRUM_ACCENT_NOTES.values()) if accents else set()
+    return all(
+        n.midi in exempt or (n.midi % 12 in KEY_SCALE and part.root_midi <= n.midi <= top)
+        for n in notes
+    )
 
 
 LEAD = instrument("synth")
@@ -99,16 +108,16 @@ def test_midi_is_exactly_song_length(instrument: InstrumentConfig) -> None:
 
 
 def test_mood_picks_chords_on_the_bright_to_dark_line() -> None:
-    assert chord_for_mood(1.0) == Chord(3, (5, 9, 0), False)  # IV
-    assert chord_for_mood(0.51) == Chord(4, (7, 11, 2), False)  # V
-    assert chord_for_mood(0.5) == Chord(1, (2, 5, 9), True)  # ii
-    assert chord_for_mood(0.0) == Chord(2, (4, 7, 11), True)  # iii
+    assert chord_for_mood(1.0) == Chord(5, (8, 0, 3), False)  # VI (Ab)
+    assert chord_for_mood(0.51) == Chord(6, (10, 2, 5), False)  # VII (Bb)
+    assert chord_for_mood(0.5) == Chord(3, (5, 8, 0), True)  # iv (Fm)
+    assert chord_for_mood(0.0) == Chord(4, (7, 10, 2), True)  # v (Gm)
 
 
 def test_pool_is_chord_on_strong_beats_and_adds_pentatonic_on_weak() -> None:
-    one = chord_for_mood(0.75)  # I
-    assert pool_notes(one, 60, 72, strong=True) == (60, 64, 67, 72)
-    assert pool_notes(one, 60, 72, strong=False) == (60, 62, 64, 67, 69, 72)
+    one = chord_for_mood(0.25)  # i (Cm)
+    assert pool_notes(one, 60, 72, strong=True) == (60, 63, 67, 72)
+    assert pool_notes(one, 60, 72, strong=False) == (60, 63, 65, 67, 70, 72)
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda d: d.id)
@@ -168,8 +177,8 @@ def test_bass_stays_in_key_and_range(dataset: DatasetConfig) -> None:
 
 
 def test_pad_voicing_is_root_octave_fifth_root_third() -> None:
-    assert pad_voicing(chord_for_mood(0.75)) == (36, 48, 55, 60, 64)  # C major: C2 C3 G3 C4 E4
-    assert pad_voicing(chord_for_mood(0.2)) == (45, 57, 64, 69, 72)  # A minor: A2 A3 E4 A4 C5
+    assert pad_voicing(chord_for_mood(0.75)) == (39, 51, 58, 63, 67)  # Eb major: Eb2 Eb3 Bb3 Eb4 G4
+    assert pad_voicing(chord_for_mood(0.25)) == (36, 48, 55, 60, 63)  # C minor: C2 C3 G3 C4 Eb4
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda d: d.id)
@@ -182,22 +191,25 @@ def test_every_pad_chord_uses_the_voicing(dataset: DatasetConfig) -> None:
 
 
 def test_guitar_voicing_matches_open_chords() -> None:
-    assert guitar_voicing(chord_for_mood(0.0)) == (40, 47, 52, 55, 59, 64)  # E minor
-    assert guitar_voicing(chord_for_mood(0.75)) == (48, 55, 60, 64, 67, 72)  # C major
+    assert guitar_voicing(chord_for_mood(0.0)) == (43, 50, 55, 58, 62, 67)  # G minor
+    assert guitar_voicing(chord_for_mood(0.25)) == (48, 55, 60, 63, 67, 72)  # C minor
 
 
 def test_strum_staggers_low_to_high() -> None:
     notes = render_guitar(ir_with_activity([0.1] * 8), GUITAR)
-    first = sorted(notes, key=lambda n: n.start_beat)[:6]
+    first = sorted(notes, key=lambda n: n.start_beat)[:3]  # one Rock power-chord strum
     assert [n.midi for n in first] == sorted(n.midi for n in first)
     assert first[1].start_beat - first[0].start_beat == pytest.approx(STRUM_GAP_BEATS)
 
 
+@pytest.mark.parametrize("genre", [g.id for g in GENRES])
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda d: d.id)
 @pytest.mark.parametrize("part", INSTRUMENTS, ids=lambda i: i.id)
-def test_no_same_pitch_overlap_in_any_part(dataset: DatasetConfig, part: InstrumentConfig) -> None:
+def test_no_same_pitch_overlap_in_any_part(
+    dataset: DatasetConfig, part: InstrumentConfig, genre: str
+) -> None:
     by_pitch: dict[int, list[Note]] = defaultdict(list)
-    for note in render_notes(build_ir(dataset.id), part):
+    for note in render_notes(build_ir(dataset.id), part, genre):
         by_pitch[note.midi].append(note)
     for notes in by_pitch.values():
         ordered = sorted(notes, key=lambda n: n.start_beat)
@@ -205,10 +217,13 @@ def test_no_same_pitch_overlap_in_any_part(dataset: DatasetConfig, part: Instrum
             assert a.start_beat + a.duration_beats <= b.start_beat + 1e-9
 
 
+@pytest.mark.parametrize("genre", [g.id for g in GENRES])
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda d: d.id)
 @pytest.mark.parametrize("part", INSTRUMENTS, ids=lambda i: i.id)
-def test_every_part_stays_in_key_and_range(dataset: DatasetConfig, part: InstrumentConfig) -> None:
-    assert in_key_and_range(render_notes(build_ir(dataset.id), part), part)
+def test_every_part_stays_in_key_and_range(
+    dataset: DatasetConfig, part: InstrumentConfig, genre: str
+) -> None:
+    assert in_key_and_range(render_notes(build_ir(dataset.id), part, genre), part, genre)
 
 
 def test_trim_overlaps_shortens_the_earlier_note() -> None:
@@ -226,7 +241,7 @@ def test_ornaments_land_on_busy_beats_with_a_gap() -> None:
 @pytest.mark.parametrize("seed", range(50))
 def test_lead_ornament_stays_in_its_beat_and_pool(seed: int) -> None:
     pool = pool_notes(chord_for_mood(0.75), 60, 84, strong=False)
-    notes = lead_ornament(random.Random(seed), 5, 64, 67, pool, 90)
+    notes = lead_ornament(random.Random(seed), 5, 63, 67, pool, 90)
     assert notes
     assert all(n.start_beat >= 5 and n.start_beat + n.duration_beats <= 6 for n in notes)
     assert all(n.midi in pool for n in notes)

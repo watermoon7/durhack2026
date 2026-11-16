@@ -16,9 +16,13 @@ import mido
 from market_band.bass import render_bass
 from market_band.chords import render_guitar, render_pad
 from market_band.config import (
+    BEATS_PER_BAR,
     DEFAULT_GENRE,
+    DRUM_ACCENT_NOTES,
     GENRES,
     NOTE_LEGATO,
+    ORNAMENT_TRIGGER,
+    ROCK_DRUM_ACCENTS,
     SCALE_INTERVALS,
     SCALE_ROOT_PITCH_CLASS,
     SONG_BEATS,
@@ -131,6 +135,51 @@ def notes_to_midi(notes: list[Note], track_name: str, beats: int = SONG_BEATS) -
     return buffer.getvalue()
 
 
+def tom_fill(ir: IRSeries, notes: list[Note]) -> list[Note]:
+    """Replace the snare on every busy fourth beat of a bar with a four-tom fill, high to low."""
+    toms = [DRUM_ACCENT_NOTES[name] for name in ("tom_hh", "tom_h", "tom_m", "tom_l")]
+    busy = {
+        i
+        for i, beat in enumerate(ir.beats)
+        if i % BEATS_PER_BAR == BEATS_PER_BAR - 1 and beat.activity >= ORNAMENT_TRIGGER
+    }
+    kept = [n for n in notes if int(n.start_beat) not in busy]
+    step = 1.0 / len(toms)
+    for index in sorted(busy):
+        velocity = intensity_to_velocity(ir.beats[index].intensity)
+        kept.extend(
+            Note(index + k * step, step * NOTE_LEGATO, tom, velocity) for k, tom in enumerate(toms)
+        )
+    return sorted(kept, key=lambda n: n.start_beat)
+
+
+def crashes(ir: IRSeries, notes: list[Note]) -> list[Note]:
+    """Add a crash on beat 1 of every bar that follows a busy bar (bar 1 follows the last)."""
+    bars = len(ir.bars)
+    assert bars * BEATS_PER_BAR == len(ir.beats), "bars and beats disagree"
+    added = list(notes)
+    for bar in range(bars):
+        previous = (bar - 1) % bars
+        window = ir.beats[previous * BEATS_PER_BAR : (previous + 1) * BEATS_PER_BAR]
+        if sum(b.activity for b in window) / len(window) >= ORNAMENT_TRIGGER:
+            start = bar * BEATS_PER_BAR
+            velocity = intensity_to_velocity(ir.beats[start].intensity)
+            added.append(Note(float(start), NOTE_LEGATO, DRUM_ACCENT_NOTES["crash"], velocity))
+    return sorted(added, key=lambda n: (n.start_beat, n.midi))
+
+
+def drum_accents(ir: IRSeries, instrument: InstrumentConfig, notes: list[Note]) -> list[Note]:
+    """Apply the instrument's Rock accent (tom fill or crash), if it has one."""
+    if instrument.role != "drum":
+        raise ValueError(f"{instrument.id} is not a drum")
+    accent = ROCK_DRUM_ACCENTS.get(instrument.id)
+    if accent == "fill":
+        return tom_fill(ir, notes)
+    if accent == "crash":
+        return crashes(ir, notes)
+    return notes
+
+
 def render_notes(
     ir: IRSeries, instrument: InstrumentConfig, genre: str = DEFAULT_GENRE
 ) -> list[Note]:
@@ -147,7 +196,8 @@ def render_notes(
     if instrument.role == "guitar":
         return render_guitar(ir, instrument, genre)
     if instrument.role == "drum":
-        return ir_to_notes(ir, instrument)
+        notes = ir_to_notes(ir, instrument)
+        return drum_accents(ir, instrument, notes) if genre == "rock" else notes
     raise ValueError(f"{instrument.id}: unknown role '{instrument.role}'")
 
 

@@ -9,7 +9,7 @@ BASS_MAX_REPEATS times in a row.
 from market_band.config import (
     BASS_MAX_REPEATS,
     BEATS_PER_BAR,
-    MAJOR_SCALE,
+    KEY_SCALE,
     MAX_TIE_BEATS,
     NOTE_LEGATO,
     InstrumentConfig,
@@ -41,10 +41,10 @@ def next_up(cycle: tuple[int, int, int], pitch: int) -> int:
 def approach_note(next_root: int, instrument: InstrumentConfig) -> int:
     """Return the scale note one step below the next root (above it at the bottom of range)."""
     low = instrument.root_midi
-    below = next(n for n in range(next_root - 1, next_root - 3, -1) if n % 12 in MAJOR_SCALE)
+    below = next(n for n in range(next_root - 1, next_root - 3, -1) if n % 12 in KEY_SCALE)
     if below >= low:
         return below
-    return next(n for n in range(next_root + 1, next_root + 3) if n % 12 in MAJOR_SCALE)
+    return next(n for n in range(next_root + 1, next_root + 3) if n % 12 in KEY_SCALE)
 
 
 def swing_pitch(cycle: tuple[int, int, int], beat: IRBeat, beat_in_bar: int) -> int:
